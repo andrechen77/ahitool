@@ -33,6 +33,9 @@ fn main() -> anyhow::Result<()> {
         Subcommand::Ar(acc_recv_args) => {
             subcommands::acc_receivable::main(&jn_api_key, acc_recv_args)?;
         }
+        Subcommand::Geo(geo_args) => {
+            subcommands::geo::main(&jn_api_key, geo_args)?;
+        }
     }
 
     Ok(())

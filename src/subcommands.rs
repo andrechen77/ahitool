@@ -1,5 +1,6 @@
 pub mod acc_receivable;
 pub mod kpi;
+pub mod geo;
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Subcommand {
@@ -7,4 +8,6 @@ pub enum Subcommand {
     Kpi(kpi::Args),
     /// Generate a report for all accounts receivable.
     Ar(acc_receivable::Args),
+    /// Look up the coordinates of an address.
+    Geo(geo::Args),
 }

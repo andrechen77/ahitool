@@ -547,7 +547,7 @@ mod output {
             RowData {
                 values: cells
                     .into_iter()
-                    .map(|cell| CellData { user_entered_value: Some(cell) })
+                    .map(|cell| CellData { user_entered_value: Some(cell), ..Default::default() })
                     .collect(),
             }
         }

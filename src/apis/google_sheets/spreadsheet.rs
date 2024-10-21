@@ -31,6 +31,16 @@ pub struct SheetProperties {
     pub sheet_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(rename = "gridProperties")]
+    pub grid_properties: Option<GridProperties>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct GridProperties {
+    #[serde(rename = "rowCount")]
+    pub row_count: i32,
+    #[serde(rename = "columnCount")]
+    pub column_count: i32,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]

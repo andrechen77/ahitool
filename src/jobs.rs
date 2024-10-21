@@ -17,6 +17,7 @@ const KEY_LOSS_DATE: &str = "Job Lost Date (Lost Status)";
 const KEY_AMOUNT_RECEIVABLE: &str = "approved_invoice_due";
 const KEY_STATUS_NAME: &str = "status_name";
 const KEY_STATUS_MOD_TIME: &str = "date_status_change";
+const KEY_GEO: &str = "geo";
 
 pub type Timestamp = DateTime<Utc>;
 pub type TimeDelta = chrono::TimeDelta;
@@ -144,7 +145,7 @@ impl Display for Status {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Job {
     pub jnid: String,
     pub milestone_dates: MilestoneDates,
@@ -160,6 +161,8 @@ pub struct Job {
     pub job_name: Option<String>,
     /// The amount receivable on this job, in cents.
     pub amt_receivable: i32,
+    /// The latitude and longitude of the job's location.
+    pub geo: Option<(f64, f64)>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -195,7 +198,7 @@ pub struct JobAnalysis {
     pub loss_timestamp: Option<Timestamp>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct AnalyzedJob {
     pub job: Job,
     /// `None` if the job has errors that prevented analysis.
@@ -412,6 +415,16 @@ impl TryFrom<serde_json::Value> for Job {
             return Err(JobFromJsonError::StatusModTimeNotFound(map));
         };
 
+        // get the latitude and longitude of the job location
+        let geo = map
+            .get(KEY_GEO)
+            .and_then(|val| val.as_object())
+            .and_then(|geo| {
+                let lat = geo.get("lat").and_then(|val| val.as_f64());
+                let lng = geo.get("lon").and_then(|val| val.as_f64());
+                lat.zip(lng).filter(|&(lat, lng)| lat != 0.0 || lng != 0.0)
+            });
+
         Ok(Job {
             jnid,
             sales_rep,
@@ -430,6 +443,7 @@ impl TryFrom<serde_json::Value> for Job {
                 loss_date,
             },
             amt_receivable,
+            geo,
         })
     }
 }
@@ -471,6 +485,7 @@ mod test {
                 loss_date: date_5,
             },
             amt_receivable: 0,
+            geo: None,
         }
     }
 
@@ -688,6 +703,7 @@ mod test {
                 loss_date: None,
             },
             amt_receivable: 0,
+            geo: None,
         };
         assert_eq!(
             analyze_job(job.clone()),

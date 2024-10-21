@@ -154,7 +154,7 @@ async fn update_spreadsheet(
     let mut existing_sheet_ids = HashSet::new();
     if let Some(sheets) = existing_spreadsheet.sheets {
         for sheet in sheets {
-            let SheetProperties { sheet_id, title } = sheet.properties;
+            let SheetProperties { sheet_id, title, .. } = sheet.properties;
             if let (Some(sheet_id), Some(title)) = (sheet_id, title) {
                 title_to_sheet_id.insert(title, sheet_id);
             }
@@ -338,4 +338,5 @@ fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<Str
 pub enum SheetNickname {
     AccReceivable,
     Kpi,
+    CoordsTemp,
 }
