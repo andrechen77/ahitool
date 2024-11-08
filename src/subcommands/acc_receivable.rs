@@ -20,6 +20,10 @@ use crate::{
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
+    /// The JobNimbus API key. This key will be cached.
+    #[arg(long, default_value = None, global = true, env)]
+    jn_api_key: Option<String>,
+
     /// The format in which to print the output.
     #[arg(long, value_enum, default_value = "human")]
     format: OutputFormat,
@@ -62,8 +66,11 @@ struct AccRecvableData<'a> {
     categorized_jobs: HashMap<Status, (i32, Vec<&'a Job>)>,
 }
 
-pub fn main(api_key: &str, args: Args) -> anyhow::Result<()> {
-    let Args { output, format, update } = args;
+pub fn main(args: Args) -> anyhow::Result<()> {
+    let Args { jn_api_key, output, format, update } = args;
+
+    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
+
     if format == OutputFormat::GoogleSheets && output.is_some() {
         CliArgs::command()
             .error(
@@ -81,7 +88,7 @@ pub fn main(api_key: &str, args: Args) -> anyhow::Result<()> {
             .exit();
     }
 
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&api_key, None)?;
+    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, None)?;
 
     let mut results = AccRecvableData { total: 0, categorized_jobs: HashMap::new() };
     for category in CATEGORIES_WE_CARE_ABOUT {

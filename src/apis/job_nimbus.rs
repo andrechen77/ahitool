@@ -11,7 +11,7 @@ const DEFAULT_CACHE_FILE: &str = "job_nimbus_api_key.txt";
 
 #[derive(Debug, thiserror::Error)]
 pub enum GetApiKeyError {
-    #[error("An API key was not specified and the cache file does not exist.")]
+    #[error("JobNimbus API key was not specified and the cache file does not exist.")]
     MissingApiKey,
     #[error(transparent)]
     IoError(#[from] std::io::Error),

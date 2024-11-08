@@ -16,6 +16,10 @@ use clap::CommandFactory as _;
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
+    /// The JobNimbus API key to use. This key will be cached.
+    #[arg(long, default_value = None, global = true, env)]
+    jn_api_key: Option<String>,
+
     /// The filter to use when query JobNimbus for jobs, using ElasticSearch
     /// syntax.
     #[arg(short, long = "filter", default_value = None)]
@@ -67,8 +71,11 @@ enum OutputFormat {
     GoogleSheets,
 }
 
-pub fn main(api_key: &str, args: Args) -> Result<()> {
-    let Args { filter_filename, from_date, to_date, format, output, update } = args;
+pub fn main(args: Args) -> Result<()> {
+    let Args { jn_api_key, filter_filename, from_date, to_date, format, output, update } = args;
+
+    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
+
     if format == OutputFormat::GoogleSheets && output.is_some() {
         CliArgs::command()
             .error(
@@ -91,7 +98,7 @@ pub fn main(api_key: &str, args: Args) -> Result<()> {
     } else {
         None
     };
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&api_key, filter.as_deref())?;
+    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, filter.as_deref())?;
 
     let from_date = match from_date.as_str() {
         "forever" => None,
