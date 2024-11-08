@@ -40,10 +40,13 @@ fn update_executable(github_repo: &str) -> anyhow::Result<()> {
 
     let client = reqwest::blocking::Client::builder().user_agent(USER_AGENT).build()?;
 
+    info!("Checking for updates at {}", api_url);
     let response: serde_json::Value = client.get(&api_url).send()?.json()?;
 
     let version_tag =
         response["tag_name"].as_str().ok_or(anyhow::anyhow!("No tag_name found in release"))?;
+    info!("Latest version is {}", version_tag);
+
     let asset_url = response["assets"]
         .as_array()
         .ok_or(anyhow::anyhow!("No assets found in release"))?
@@ -58,12 +61,12 @@ fn update_executable(github_repo: &str) -> anyhow::Result<()> {
         })
         .ok_or(anyhow::anyhow!("No suitable asset found for this platform"))?;
 
-    // download the asset to a temporary file
+    info!("Downloading asset from {}", asset_url);
     let mut response = client.get(asset_url).send()?;
     let mut temp_file = tempfile::Builder::new().suffix(".tmp").tempfile()?;
     response.copy_to(&mut temp_file)?;
 
-    // Replace the current executable with the new version
+    info!("Installing updated version");
     self_replace::self_replace(temp_file.path())?;
 
     info!("Updated executable to version {}", version_tag);
