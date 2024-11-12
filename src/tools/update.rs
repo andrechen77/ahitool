@@ -1,18 +1,5 @@
 use tracing::info;
 
-#[derive(clap::Args, Debug)]
-pub struct Args {
-    /// The GitHub repository to check for updates.
-    #[arg(long, default_value = GITHUB_REPO)]
-    repo: String,
-}
-
-pub fn main(args: Args) -> anyhow::Result<()> {
-    let Args { repo } = args;
-    update_executable(&repo)?;
-    Ok(())
-}
-
 pub const GITHUB_REPO: &str = "andrechen77/ahitool";
 
 const USER_AGENT: &str = "andrechen77/ahitool";
@@ -29,7 +16,7 @@ const ASSET_NAME: Option<&str> = Some("ahitool-linux");
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 const ASSET_NAME: Option<&str> = None;
 
-fn update_executable(github_repo: &str) -> anyhow::Result<()> {
+pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
     let Some(asset_name) = ASSET_NAME else {
         anyhow::bail!(
             "unsupported platform; I don't know how to download assets for this platform"

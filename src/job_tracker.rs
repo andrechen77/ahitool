@@ -1,6 +1,17 @@
-use std::{fmt::Display, usize};
+use std::{fmt::Display, rc::Rc, usize};
 
-use crate::jobs::{TimeDelta, Timestamp};
+use crate::jobs::{AnalyzedJob, JobKind, Milestone, TimeDelta, Timestamp};
+
+pub type JobTracker3x5 =
+    JobTracker<{ JobKind::NUM_VARIANTS }, { Milestone::NUM_VARIANTS }, Rc<AnalyzedJob>>;
+
+pub fn build_job_tracker() -> JobTracker3x5 {
+    JobTracker::new([
+        [true, true, true, true, true],
+        [true, true, false, true, true],
+        [true, true, false, true, true],
+    ])
+}
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Bucket<J> {

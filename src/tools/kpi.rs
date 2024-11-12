@@ -1,154 +1,15 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::path::Path;
+use std::rc::Rc;
 
-use crate::apis::job_nimbus;
-use crate::CliArgs;
-use anyhow::Context;
-use anyhow::Result;
-use chrono::Datelike as _;
-use chrono::NaiveDate;
-use chrono::NaiveDateTime;
-use chrono::NaiveTime;
-use chrono::TimeZone as _;
-use chrono::Utc;
-use clap::CommandFactory as _;
-
-#[derive(clap::Args, Debug)]
-pub struct Args {
-    /// The JobNimbus API key to use. This key will be cached.
-    #[arg(long, default_value = None, global = true, env)]
-    jn_api_key: Option<String>,
-
-    /// The filter to use when query JobNimbus for jobs, using ElasticSearch
-    /// syntax.
-    #[arg(short, long = "filter", default_value = None)]
-    filter_filename: Option<String>,
-
-    /// The minimum date to filter jobs by. The final report will only include
-    /// jobs where the date that they were settled (date of install or date of
-    /// loss) is after the minimum date. Valid options are a date of the form
-    /// "%Y-%m-%d", "ytd" (indicating the start of the current year), "today"
-    /// (indicating the current date), or "forever" (indicating the beginning of
-    /// time).
-    #[arg(long = "from", default_value = "forever")]
-    from_date: String,
-    /// The maximum date to filter jobs by. The final report will only include
-    /// jobs where the date that they were settled (date of install or date of
-    /// loss) is before the maximum date. Valid options are a date of the form
-    /// "%Y-%m-%d", "today" (indicating the current date), or "forever"
-    /// (indicating the end of time).
-    #[arg(long = "to", default_value = "today")]
-    to_date: String,
-
-    /// The format in which to print the output.
-    #[arg(long, value_enum, default_value = "google-sheets")]
-    format: OutputFormat,
-
-    /// The directory to write the output to. "-" or unspecified will write
-    /// concatenated file contents to stdout. This option is ignored with
-    /// `--format google-sheets`.
-    #[arg(short, long, default_value = None)]
-    output: Option<String>,
-
-    /// Only valid with `--format google-sheets`. Whether to always create a new
-    /// Google Sheet. If not specified, then updates the existing Google Sheet
-    /// for this command if it exists.
-    #[arg(long)]
-    new: bool,
-}
-
-#[derive(Debug, clap::ValueEnum, Clone, Copy, Eq, PartialEq)]
-enum OutputFormat {
-    /// Prints a set of human-readable .txt files into the output directory (or
-    /// into stdout). Each file corresponds to a sales rep's stats or red flags.
-    Human,
-    /// Prints a set of CSV files into the output directory. Each file
-    /// corresponds to a sales rep's stats, and there is also a CSV file for
-    /// red flags.
-    Csv,
-    /// Outputs a Google Sheet on the user's Google Drive (requires OAuth
-    /// authorization).
-    GoogleSheets,
-}
-
-pub fn main(args: Args) -> Result<()> {
-    let Args { jn_api_key, filter_filename, from_date, to_date, format, output, new } = args;
-
-    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
-
-    if format == OutputFormat::GoogleSheets && output.is_some() {
-        CliArgs::command()
-            .error(
-                clap::error::ErrorKind::ArgumentConflict,
-                "The `--output` option cannot be used with `--format google-sheets`",
-            )
-            .exit();
-    }
-    if format != OutputFormat::GoogleSheets && new {
-        CliArgs::command()
-            .error(
-                clap::error::ErrorKind::ArgumentConflict,
-                "The `--new` option can only be used with `--format google-sheets`",
-            )
-            .exit();
-    }
-
-    let filter = if let Some(filter_filename) = filter_filename {
-        Some(std::fs::read_to_string(filter_filename)?)
-    } else {
-        None
-    };
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, filter.as_deref())?;
-
-    let from_date = match from_date.as_str() {
-        "forever" => None,
-        "ytd" => Some(
-            Utc.from_utc_datetime(&NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(Utc::now().year(), 1, 1)
-                    .expect("Jan 1 should always be valid in the current year."),
-                NaiveTime::MIN,
-            )),
-        ),
-        "today" => Some(Utc::now()),
-        date_string => Some(
-            NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
-                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)))
-                .context("Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'.")?,
-        ),
-    };
-    let to_date = match to_date.as_str() {
-        "forever" => None,
-        "today" => Some(Utc::now()),
-        date_string => Some(
-            NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
-                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)))
-                .context("Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'.")?,
-        ),
-    };
-
-    let (trackers, red_flags) = processing::process_jobs(jobs.into_iter(), (from_date, to_date));
-    let tracker_stats = trackers
-        .into_iter()
-        .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
-        .filter(|(_, stats)| stats.appt_count > 0)
-        .collect::<BTreeMap<_, _>>();
-
-    let output = output.filter(|s| s != "-");
-    let output = output.as_deref().map(|path| Path::new(path));
-    match format {
-        OutputFormat::Human => output::print_report_human(&tracker_stats, &red_flags, output)?,
-        OutputFormat::Csv => output::print_report_csv(&tracker_stats, &red_flags, output)?,
-        OutputFormat::GoogleSheets => {
-            output::generate_report_google_sheets(&tracker_stats, &red_flags, !new)?
-        }
-    }
-
-    Ok(())
-}
+use crate::jobs::AnalyzedJob;
+use crate::jobs::Job;
+use crate::jobs::JobAnalysisError;
+use crate::jobs::Timestamp;
+use csv as csv_crate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum KpiSubject {
+pub enum KpiSubject {
     Global,
     SalesRep(String),
     UnknownSalesRep,
@@ -163,13 +24,33 @@ impl Display for KpiSubject {
     }
 }
 
+pub use processing::JobTrackerStats;
+
+pub struct KpiResult {
+    pub stats_by_rep: BTreeMap<KpiSubject, JobTrackerStats>,
+    pub red_flags_by_rep: BTreeMap<KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
+}
+
+pub fn calculate_kpi<'a>(
+    jobs: impl IntoIterator<Item = Job>,
+    (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
+) -> anyhow::Result<KpiResult> {
+    let (trackers_by_rep, red_flags_by_rep) = processing::process_jobs(jobs.into_iter(), (from_dt, to_dt));
+    let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
+        .into_iter()
+        .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
+        .filter(|(_, stats)| stats.appt_count > 0)
+        .collect();
+    Ok(KpiResult { stats_by_rep, red_flags_by_rep })
+}
+
 mod processing {
-    use std::{collections::HashMap, rc::Rc};
+    use std::{collections::BTreeMap, rc::Rc};
 
     use tracing::info;
 
     use crate::{
-        job_tracker::{self, CalcStatsResult, JobTracker},
+        job_tracker::{self, CalcStatsResult, JobTracker3x5},
         jobs::{
             self, AnalyzedJob, Job, JobAnalysisError, JobKind, Milestone, TimeDelta, Timestamp,
         },
@@ -177,9 +58,9 @@ mod processing {
 
     use super::KpiSubject;
 
-    pub type TrackersAndFlags = (
-        HashMap<KpiSubject, JobTracker3x5>,
-        HashMap<KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
+    type TrackersAndFlags = (
+        BTreeMap<KpiSubject, JobTracker3x5>,
+        BTreeMap<KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
     );
 
     pub fn process_jobs(
@@ -192,8 +73,8 @@ mod processing {
             to_dt.map(|dt| dt.to_string()).as_deref().unwrap_or("the end of time")
         );
 
-        let mut trackers = HashMap::new();
-        let mut red_flags = HashMap::new();
+        let mut trackers = BTreeMap::new();
+        let mut red_flags = BTreeMap::new();
         for job in jobs {
             let (analyzed, errors) = jobs::analyze_job(job);
             let analyzed = Rc::new(analyzed);
@@ -211,14 +92,14 @@ mod processing {
                         let kind = analysis.kind.into_int();
                         trackers
                             .entry(KpiSubject::Global)
-                            .or_insert_with(build_job_tracker)
+                            .or_insert_with(job_tracker::build_job_tracker)
                             .add_job(
                                 &analyzed,
                                 kind,
                                 &analysis.timestamps,
                                 analysis.loss_timestamp,
                             );
-                        trackers.entry(target.clone()).or_insert_with(build_job_tracker).add_job(
+                        trackers.entry(target.clone()).or_insert_with(job_tracker::build_job_tracker).add_job(
                             &analyzed,
                             kind,
                             &analysis.timestamps,
@@ -237,17 +118,6 @@ mod processing {
         }
 
         (trackers, red_flags)
-    }
-
-    type JobTracker3x5 =
-        JobTracker<{ JobKind::NUM_VARIANTS }, { Milestone::NUM_VARIANTS }, Rc<AnalyzedJob>>;
-
-    fn build_job_tracker() -> JobTracker3x5 {
-        JobTracker::new([
-            [true, true, true, true, true],
-            [true, true, false, true, true],
-            [true, true, false, true, true],
-        ])
     }
 
     #[derive(Debug)]
@@ -368,11 +238,9 @@ mod processing {
     }
 }
 
-mod output {
+pub mod output {
     use std::{
-        io::{BufWriter, Write},
-        path::Path,
-        rc::Rc,
+        fs::File, io::{BufWriter, Write}, path::Path, rc::Rc
     };
 
     use chrono::Utc;
@@ -389,33 +257,17 @@ mod output {
         utils,
     };
 
-    use super::{processing::JobTrackerStats, KpiSubject};
+    use super::{processing::JobTrackerStats, KpiResult, KpiSubject, csv_crate};
 
-    pub fn print_report_human<'a>(
-        tracker_stats: impl IntoIterator<Item = (&'a KpiSubject, &'a JobTrackerStats)>,
-        red_flags: impl IntoIterator<
-            Item = (&'a KpiSubject, &'a Vec<(Rc<AnalyzedJob>, JobAnalysisError)>),
-        >,
-        output_dir: Option<&Path>,
-    ) -> std::io::Result<()> {
-        // make sure that output_dir exists
-        if let Some(output_dir) = output_dir {
-            std::fs::create_dir_all(output_dir)?;
-        }
+    pub mod human {
+        use std::collections::btree_map;
 
-        for (rep, stats) in tracker_stats {
-            // create the file for this rep
-            let mut out: Box<dyn Write> = if let Some(output_dir) = output_dir {
-                Box::new(BufWriter::new(
-                    std::fs::File::create(output_dir.join(format!("rep-{}-stats.txt", rep)))
-                        .expect("the directory should exist"),
-                ))
-            } else {
-                Box::new(std::io::stdout())
-            };
+        use super::*;
 
-            // print the report into the file
-            writeln!(out, "Tracker for {}: ================", rep)?;
+        pub fn print_single_tracker<'a, 'b, 'w, W>(subject: &'a KpiSubject, stats: &'b JobTrackerStats, out: &'w mut W) -> std::io::Result<()>
+        where W: Write
+        {
+            writeln!(out, "Tracker for {}: ================", subject)?;
             writeln!(out, "Appts {} | Installed {}", stats.appt_count, stats.install_count)?;
             for (name, conv_stats) in [
                 ("All Losses", &stats.loss_conv),
@@ -434,64 +286,53 @@ mod output {
                     conv_stats.achieved.len(),
                     into_days(conv_stats.average_time_to_achieve),
                 )?;
-                if *rep != KpiSubject::Global {
+                if *subject != KpiSubject::Global {
                     writeln!(out, "    - {}", into_list_of_job_nums(&conv_stats.achieved))?;
                 }
             }
-            writeln!(out, "")?;
-            out.flush()?;
+            Ok(())
         }
 
-        let mut out: Box<dyn Write> = if let Some(output_dir) = output_dir {
-            Box::new(BufWriter::new(
-                std::fs::File::create(output_dir.join("red-flags.txt"))
-                    .expect("the directory should exist"),
-            ))
-        } else {
-            Box::new(std::io::stdout())
-        };
-        for (rep, red_flags) in red_flags {
-            writeln!(out, "Red flags for {}: ===============", rep)?;
-            for (job, err) in red_flags {
-                writeln!(
-                    out,
-                    "{}: {}",
-                    job.job.job_number.as_deref().unwrap_or("unknown job #"),
-                    err
-                )?;
+        pub fn print_red_flags<'a, 'w, W>(
+            red_flags_by_rep: btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
+            out: &'w mut W
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
+            for (rep, red_flags) in red_flags_by_rep {
+                writeln!(out, "Red flags for {}: ===============", rep)?;
+                for (job, err) in red_flags {
+                    writeln!(
+                        out,
+                        "{}: {}",
+                        job.job.job_number.as_deref().unwrap_or("unknown job #"),
+                        err
+                    )?;
+                }
             }
-            writeln!(out, "")?;
+            Ok(())
         }
-        out.flush()?;
 
-        Ok(())
+        pub fn print_entire_report_directory(kpi_result: &KpiResult, output_dir: &Path) -> std::io::Result<()> {
+            super::print_entire_report_directory(kpi_result, output_dir, print_single_tracker, print_red_flags)
+        }
+
+        pub fn print_entire_report_to_writer<W>(kpi_result: &KpiResult, out: W) -> std::io::Result<()>
+        where W: Write {
+            super::print_entire_report_to_writer(kpi_result, out, print_single_tracker, print_red_flags)
+        }
     }
 
-    pub fn print_report_csv<'a>(
-        tracker_stats: impl IntoIterator<Item = (&'a KpiSubject, &'a JobTrackerStats)>,
-        red_flags: impl IntoIterator<
-            Item = (&'a KpiSubject, &'a Vec<(Rc<AnalyzedJob>, JobAnalysisError)>),
-        >,
-        output_dir: Option<&Path>,
-    ) -> std::io::Result<()> {
-        // make sure that output_dir exists
-        if let Some(output_dir) = output_dir {
-            std::fs::create_dir_all(output_dir)?;
-        }
+    pub mod csv {
+        use std::collections::btree_map;
 
-        for (rep, stats) in tracker_stats {
-            // create the file for this rep
-            let out: Box<dyn Write> = if let Some(output_dir) = output_dir {
-                Box::new(BufWriter::new(
-                    std::fs::File::create(output_dir.join(format!("rep-{}-stats.csv", rep)))
-                        .expect("the directory should exist"),
-                ))
-            } else {
-                Box::new(std::io::stdout())
-            };
-            let mut out = csv::Writer::from_writer(out);
+        use super::*;
 
-            out.write_record(&["Conversion", "Rate", "Total", "Avg Time (days)", "Jobs"])?;
+        pub fn print_single_tracker<'a, 'b, 'w, W>(_subject: &'a KpiSubject, stats: &'b JobTrackerStats, out: &'w mut W) -> std::io::Result<()>
+        where W: Write {
+            let mut writer = csv_crate::Writer::from_writer(out);
+            writer.write_record(&["Conversion", "Rate", "Total", "Avg Time (days)", "Jobs"])?;
             for (name, conv_stats) in [
                 ("All Losses", &stats.loss_conv),
                 ("(I) Appt to Contingency", &stats.appt_continge_conv),
@@ -501,7 +342,7 @@ mod output {
                 ("(I) Contract to Installation", &stats.install_insure_conv),
                 ("(R) Contract to Installation", &stats.install_retail_conv),
             ] {
-                out.write_record(&[
+                writer.write_record(&[
                     name,
                     &percent_or_na(conv_stats.conversion_rate),
                     &conv_stats.achieved.len().to_string(),
@@ -509,47 +350,109 @@ mod output {
                     &into_list_of_job_nums(&conv_stats.achieved),
                 ])?;
             }
-            out.write_record(&[
+            writer.write_record(&[
                 "Appts",
                 &stats.appt_count.to_string(),
                 "",
                 "Installed",
                 &stats.install_count.to_string(),
             ])?;
-
-            out.flush()?;
+            Ok(())
         }
 
-        let out: Box<dyn Write> = if let Some(output_dir) = output_dir {
-            Box::new(BufWriter::new(
-                std::fs::File::create(output_dir.join("red-flags.csv"))
-                    .expect("the directory should exist"),
-            ))
-        } else {
-            Box::new(std::io::stdout())
-        };
-        let mut out = csv::Writer::from_writer(out);
-        out.write_record(&["Sales Rep", "Job Number", "Error"])?;
-        for (rep, red_flags) in red_flags {
-            for (job, err) in red_flags {
-                out.write_record(&[
-                    &rep.to_string(),
-                    job.job.job_number.as_deref().unwrap_or("unknown job #"),
-                    &err.to_string(),
-                ])?;
+        pub fn print_red_flags<'a, 'w, W>(
+            red_flags_by_rep: btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
+            out: &'w mut W
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
+            let mut writer = csv_crate::Writer::from_writer(out);
+            writer.write_record(&["Sales Rep", "Job Number", "Error"])?;
+            for (rep, red_flags) in red_flags_by_rep {
+                for (job, err) in red_flags {
+                    writer.write_record(&[
+                        &rep.to_string(),
+                        job.job.job_number.as_deref().unwrap_or("unknown job #"),
+                        &err.to_string(),
+                    ])?;
+                }
             }
+            Ok(())
         }
-        out.flush()?;
+
+        pub fn print_entire_report_directory(kpi_result: &KpiResult, output_dir: &Path) -> std::io::Result<()> {
+            super::print_entire_report_directory(kpi_result, output_dir, print_single_tracker, print_red_flags)
+        }
+
+        pub fn print_entire_report_to_writer<W>(kpi_result: &KpiResult, out: W) -> std::io::Result<()>
+        where W: Write {
+            super::print_entire_report_to_writer(kpi_result, out, print_single_tracker, print_red_flags)
+        }
+    }
+
+    fn print_entire_report_directory<F0, F1>(
+        kpi_result: &KpiResult,
+        output_dir: &Path,
+        print_single_tracker: F0,
+        print_red_flags: F1,
+    ) -> std::io::Result<()>
+    where
+        F0: for<'a, 'b, 'w> Fn(&'a KpiSubject, &'b JobTrackerStats, &'w mut BufWriter<File>) -> std::io::Result<()>,
+        F1: for<'a, 'w> Fn(std::collections::btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>, &'w mut BufWriter<File>) -> std::io::Result<()>,
+    {
+        let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
+
+        // make sure that the output directory exists
+        std::fs::create_dir_all(output_dir)?;
+
+        // print the trackers
+        for (rep, stats) in stats_by_rep {
+            let mut out_file = BufWriter::new(
+                std::fs::File::create(output_dir.join(format!("rep-{}-stats.txt", rep)))
+                    .expect("the directory should exist"),
+            );
+            print_single_tracker(rep, stats, &mut out_file)?;
+            out_file.flush()?;
+        }
+
+        // print the red flags
+        let mut out_file = BufWriter::new(
+            std::fs::File::create(output_dir.join("red-flags.txt")).expect("the directory should exist"),
+        );
+        print_red_flags(red_flags_by_rep.iter(), &mut out_file)?;
+        out_file.flush()?;
 
         Ok(())
     }
 
-    pub fn generate_report_google_sheets<'a>(
-        tracker_stats: impl IntoIterator<Item = (&'a KpiSubject, &'a JobTrackerStats)>,
-        red_flags: impl IntoIterator<
-            Item = (&'a KpiSubject, &'a Vec<(Rc<AnalyzedJob>, JobAnalysisError)>),
-        >,
-        update: bool,
+    fn print_entire_report_to_writer<W, F0, F1>(
+        kpi_result: &KpiResult,
+        mut out: W,
+        print_single_tracker: F0,
+        print_red_flags: F1,
+    ) -> std::io::Result<()>
+    where
+        W: Write,
+        F0: for<'a, 'b, 'w> Fn(&'a KpiSubject, &'b JobTrackerStats, &'w mut W) -> std::io::Result<()>,
+        F1: for<'a, 'w> Fn(std::collections::btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>, &'w mut W) -> std::io::Result<()>,
+    {
+        let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
+
+        // print the trackers
+        for (rep, stats) in stats_by_rep {
+            print_single_tracker(rep, stats, &mut out)?;
+        }
+
+        // print the red flags
+        print_red_flags(red_flags_by_rep.iter(), &mut out)?;
+        Ok(())
+    }
+
+
+    pub fn generate_report_google_sheets(
+        kpi_result: &KpiResult,
+        spreadsheet_id: Option<&str>,
     ) -> anyhow::Result<()> {
         fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
             RowData {
@@ -560,8 +463,10 @@ mod output {
             }
         }
 
+        let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
+
         // create a stats sheet for each rep
-        let mut sheets: Vec<_> = tracker_stats
+        let mut sheets: Vec<_> = stats_by_rep
             .into_iter()
             .map(|(rep, stats)| {
                 let mut rows = Vec::new();
@@ -615,7 +520,7 @@ mod output {
             ExtendedValue::StringValue("Job Number".to_string()),
             ExtendedValue::StringValue("Error".to_string()),
         ]));
-        for (rep, red_flags) in red_flags {
+        for (rep, red_flags) in red_flags_by_rep {
             for (job, err) in red_flags {
                 rows.push(mk_row([
                     ExtendedValue::StringValue(rep.to_string()),
@@ -653,10 +558,10 @@ mod output {
                     let spreadsheet = &spreadsheet;
                     async move {
                         let spreadsheet = spreadsheet.clone();
-                        if update {
-                            google_sheets::create_or_write_spreadsheet(
+                        if let Some(spreadsheet_id) = spreadsheet_id {
+                            google_sheets::update_spreadsheet(
                                 &token,
-                                google_sheets::SheetNickname::Kpi,
+                                spreadsheet_id,
                                 spreadsheet,
                             )
                             .await

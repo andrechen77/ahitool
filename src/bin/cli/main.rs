@@ -1,11 +1,8 @@
 use clap::Parser;
-use subcommands::Subcommand;
 
-mod apis;
-mod job_tracker;
-mod jobs;
-mod subcommands;
-mod utils;
+mod kpi;
+mod acc_receivable;
+mod update;
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -22,15 +19,25 @@ fn main() -> anyhow::Result<()> {
 
     match command {
         Subcommand::Kpi(job_kpi_args) => {
-            subcommands::kpi::main(job_kpi_args)?;
+            kpi::main(job_kpi_args)?;
         }
         Subcommand::Ar(acc_recv_args) => {
-            subcommands::acc_receivable::main(acc_recv_args)?;
+            acc_receivable::main(acc_recv_args)?;
         }
         Subcommand::Update(update_args) => {
-            subcommands::update::main(update_args)?;
+            update::main(update_args)?;
         }
     }
 
     Ok(())
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum Subcommand {
+    /// Update the executable to the latest version.
+    Update(update::Args),
+    /// Generate a KPI report for salesmen based on job milestones.
+    Kpi(kpi::Args),
+    /// Generate a report for all accounts receivable.
+    Ar(acc_receivable::Args),
 }

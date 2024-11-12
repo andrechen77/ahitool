@@ -112,7 +112,7 @@ pub async fn create_spreadsheet(
     Ok(spreadsheet_url)
 }
 
-async fn update_spreadsheet(
+pub async fn update_spreadsheet(
     creds: &Token,
     spreadsheet_id: &str,
     spreadsheet: Spreadsheet,
@@ -290,7 +290,7 @@ async fn update_spreadsheet(
 /// the spreadsheet ID.
 type KnownSheets<'a> = HashMap<SheetNickname, Cow<'a, str>>;
 
-fn update_known_sheets_file(nickname: SheetNickname, spreadsheet_id: &str) -> std::io::Result<()> {
+pub fn update_known_sheets_file(nickname: SheetNickname, spreadsheet_id: &str) -> std::io::Result<()> {
     let path = Path::new(KNOWN_SHEETS_FILE);
 
     // deserialize the existing known sheets
@@ -319,7 +319,7 @@ fn update_known_sheets_file(nickname: SheetNickname, spreadsheet_id: &str) -> st
 
 /// Reads the known sheets file and returns the value associated with the
 /// specified nickname.
-fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
+pub fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
     let file = match File::open(KNOWN_SHEETS_FILE) {
         Ok(file) => file,
         Err(e) => {
