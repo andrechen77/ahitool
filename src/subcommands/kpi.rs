@@ -42,7 +42,7 @@ pub struct Args {
     to_date: String,
 
     /// The format in which to print the output.
-    #[arg(long, value_enum, default_value = "human")]
+    #[arg(long, value_enum, default_value = "google-sheets")]
     format: OutputFormat,
 
     /// The directory to write the output to. "-" or unspecified will write
@@ -51,10 +51,11 @@ pub struct Args {
     #[arg(short, long, default_value = None)]
     output: Option<String>,
 
-    /// Only valid with `--format google-sheets`. Whether to update an existing
-    /// Google Sheet; if not specified, creates a new Google Sheet.
+    /// Only valid with `--format google-sheets`. Whether to always create a new
+    /// Google Sheet. If not specified, then updates the existing Google Sheet
+    /// for this command if it exists.
     #[arg(long)]
-    update: bool,
+    new: bool,
 }
 
 #[derive(Debug, clap::ValueEnum, Clone, Copy, Eq, PartialEq)]
@@ -72,7 +73,7 @@ enum OutputFormat {
 }
 
 pub fn main(args: Args) -> Result<()> {
-    let Args { jn_api_key, filter_filename, from_date, to_date, format, output, update } = args;
+    let Args { jn_api_key, filter_filename, from_date, to_date, format, output, new } = args;
 
     let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
 
@@ -84,11 +85,11 @@ pub fn main(args: Args) -> Result<()> {
             )
             .exit();
     }
-    if format != OutputFormat::GoogleSheets && update {
+    if format != OutputFormat::GoogleSheets && new {
         CliArgs::command()
             .error(
                 clap::error::ErrorKind::ArgumentConflict,
-                "The `--update` option can only be used with `--format google-sheets`",
+                "The `--new` option can only be used with `--format google-sheets`",
             )
             .exit();
     }
@@ -139,7 +140,7 @@ pub fn main(args: Args) -> Result<()> {
         OutputFormat::Human => output::print_report_human(&tracker_stats, &red_flags, output)?,
         OutputFormat::Csv => output::print_report_csv(&tracker_stats, &red_flags, output)?,
         OutputFormat::GoogleSheets => {
-            output::generate_report_google_sheets(&tracker_stats, &red_flags, update)?
+            output::generate_report_google_sheets(&tracker_stats, &red_flags, !new)?
         }
     }
 

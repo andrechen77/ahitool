@@ -25,7 +25,7 @@ pub struct Args {
     jn_api_key: Option<String>,
 
     /// The format in which to print the output.
-    #[arg(long, value_enum, default_value = "human")]
+    #[arg(long, value_enum, default_value = "google-sheets")]
     format: OutputFormat,
 
     /// The file to write the output to. "-" or unspecified will write to
@@ -33,10 +33,11 @@ pub struct Args {
     #[arg(short, long, default_value = None)]
     output: Option<String>,
 
-    /// Only valid with `--format google-sheets`. Whether to update an existing
-    /// Google Sheet; if not specified, creates a new Google Sheet.
+    /// Only valid with `--format google-sheets`. Whether to always create a new
+    /// Google Sheet. If not specified, then updates the existing Google Sheet
+    /// for this command if it exists.
     #[arg(long)]
-    update: bool,
+    new: bool,
 }
 
 #[derive(Debug, clap::ValueEnum, Clone, Copy, Eq, PartialEq)]
@@ -67,7 +68,7 @@ struct AccRecvableData<'a> {
 }
 
 pub fn main(args: Args) -> anyhow::Result<()> {
-    let Args { jn_api_key, output, format, update } = args;
+    let Args { jn_api_key, output, format, new } = args;
 
     let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
 
@@ -79,11 +80,11 @@ pub fn main(args: Args) -> anyhow::Result<()> {
             )
             .exit();
     }
-    if format != OutputFormat::GoogleSheets && update {
+    if format != OutputFormat::GoogleSheets && new {
         CliArgs::command()
             .error(
                 clap::error::ErrorKind::ArgumentConflict,
-                "The `--update` option can only be used with `--format google-sheets`",
+                "The `--new` option can only be used with `--format google-sheets`",
             )
             .exit();
     }
@@ -115,7 +116,7 @@ pub fn main(args: Args) -> anyhow::Result<()> {
         OutputFormat::Human => print_human(&results, output_writer)?,
         OutputFormat::Csv => print_csv(&results, output_writer)?,
         OutputFormat::GoogleSheets => {
-            generate_report_google_sheets(&results, update)?;
+            generate_report_google_sheets(&results, !new)?;
         }
     }
 
