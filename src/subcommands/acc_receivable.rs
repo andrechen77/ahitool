@@ -140,8 +140,8 @@ fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io::Re
             let days_in_status = Utc::now().signed_duration_since(job.status_mod_date).num_days();
             writeln!(
                 writer,
-                "        - {} (#{}): ${:.2} ({} days)",
-                name, number, amount_receivable, days_in_status
+                "        - {} (#{}): ${:.2} ({} days, assigned to {})",
+                name, number, amount_receivable, days_in_status, job.sales_rep.as_deref().unwrap_or("Unknown Sales Rep")
             )?;
         }
     }
@@ -153,8 +153,8 @@ fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io::Re
         let days_in_status = Utc::now().signed_duration_since(job.status_mod_date).num_days();
         writeln!(
             writer,
-            "    - {} (#{}): ({} for {} days)",
-            name, number, job.status, days_in_status
+            "    - {} (#{}): ({} for {} days, assigned to {})",
+            name, number, job.status, days_in_status, job.sales_rep.as_deref().unwrap_or("Unknown Sales Rep")
         )?;
     }
 
@@ -164,11 +164,12 @@ fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io::Re
 fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Result<()> {
     let mut writer = csv::Writer::from_writer(writer);
     writer
-        .write_record(&["Job Name", "Job Number", "Job Status", "Amount", "Days In Status"])
+        .write_record(&["Job Name", "Sales Rep", "Job Number", "Job Status", "Amount", "Days In Status"])
         .unwrap();
     for (_status, (_category_total, jobs)) in &results.categorized_jobs {
         for job in jobs {
             let name = job.job_name.as_deref().unwrap_or("");
+            let sales_rep = job.sales_rep.as_deref().unwrap_or("Unknown Salesman");
             let number = job.job_number.as_deref().unwrap_or("Unknown Job Number");
             let status = format!("{}", job.status);
             let amount_receivable = (job.amt_receivable as f64) / 100.0;
@@ -176,6 +177,7 @@ fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Result<(
             writer
                 .write_record(&[
                     name,
+                    sales_rep,
                     number,
                     &status,
                     &amount_receivable.to_string(),
@@ -204,6 +206,7 @@ fn generate_report_google_sheets(
     let mut rows = Vec::new();
     rows.push(mk_row([
         ExtendedValue::StringValue("Job Name".to_string()),
+        ExtendedValue::StringValue("Job Salesman".to_string()),
         ExtendedValue::StringValue("Job Number".to_string()),
         ExtendedValue::StringValue("Job Status".to_string()),
         ExtendedValue::StringValue("Amount".to_string()),
@@ -212,12 +215,14 @@ fn generate_report_google_sheets(
     for (_status, (_category_total, jobs)) in &results.categorized_jobs {
         for job in jobs {
             let name = job.job_name.as_deref().unwrap_or("");
+            let sales_rep = job.sales_rep.as_deref().unwrap_or("Unknown Salesman");
             let number = job.job_number.as_deref().unwrap_or("Unknown Job Number");
             let status = job.status.to_string();
             let amount_receivable = (job.amt_receivable as f64) / 100.0;
             let days_in_status = Utc::now().signed_duration_since(job.status_mod_date).num_days();
             rows.push(mk_row([
                 ExtendedValue::StringValue(name.to_owned()),
+                ExtendedValue::StringValue(sales_rep.to_owned()),
                 ExtendedValue::StringValue(number.to_owned()),
                 ExtendedValue::StringValue(status),
                 ExtendedValue::NumberValue(amount_receivable),
