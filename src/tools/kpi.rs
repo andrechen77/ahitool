@@ -26,7 +26,7 @@ impl Display for KpiSubject {
 
 pub use processing::JobTrackerStats;
 
-pub struct KpiResult {
+pub struct KpiData {
     pub stats_by_rep: BTreeMap<KpiSubject, JobTrackerStats>,
     pub red_flags_by_rep: BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
 }
@@ -34,7 +34,7 @@ pub struct KpiResult {
 pub fn calculate_kpi<'a>(
     jobs: impl IntoIterator<Item = Job>,
     (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
-) -> KpiResult {
+) -> KpiData {
     let (trackers_by_rep, red_flags_by_rep) =
         processing::process_jobs(jobs.into_iter(), (from_dt, to_dt));
     let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
@@ -42,7 +42,7 @@ pub fn calculate_kpi<'a>(
         .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
         .filter(|(_, stats)| stats.appt_count > 0)
         .collect();
-    KpiResult { stats_by_rep, red_flags_by_rep }
+    KpiData { stats_by_rep, red_flags_by_rep }
 }
 
 mod processing {
@@ -264,7 +264,7 @@ pub mod output {
         utils,
     };
 
-    use super::{csv_crate, processing::JobTrackerStats, KpiResult, KpiSubject};
+    use super::{csv_crate, processing::JobTrackerStats, KpiData, KpiSubject};
 
     pub mod human {
         use std::collections::btree_map;
@@ -331,7 +331,7 @@ pub mod output {
         }
 
         pub fn print_entire_report_directory(
-            kpi_result: &KpiResult,
+            kpi_result: &KpiData,
             output_dir: &Path,
         ) -> std::io::Result<()> {
             super::print_entire_report_directory(
@@ -342,10 +342,7 @@ pub mod output {
             )
         }
 
-        pub fn print_entire_report_to_writer<W>(
-            kpi_result: &KpiResult,
-            out: W,
-        ) -> std::io::Result<()>
+        pub fn print_entire_report_to_writer<W>(kpi_result: &KpiData, out: W) -> std::io::Result<()>
         where
             W: Write,
         {
@@ -426,7 +423,7 @@ pub mod output {
         }
 
         pub fn print_entire_report_directory(
-            kpi_result: &KpiResult,
+            kpi_result: &KpiData,
             output_dir: &Path,
         ) -> std::io::Result<()> {
             super::print_entire_report_directory(
@@ -437,10 +434,7 @@ pub mod output {
             )
         }
 
-        pub fn print_entire_report_to_writer<W>(
-            kpi_result: &KpiResult,
-            out: W,
-        ) -> std::io::Result<()>
+        pub fn print_entire_report_to_writer<W>(kpi_result: &KpiData, out: W) -> std::io::Result<()>
         where
             W: Write,
         {
@@ -454,7 +448,7 @@ pub mod output {
     }
 
     fn print_entire_report_directory<F0, F1>(
-        kpi_result: &KpiResult,
+        kpi_result: &KpiData,
         output_dir: &Path,
         print_single_tracker: F0,
         print_red_flags: F1,
@@ -474,7 +468,7 @@ pub mod output {
             &'w mut BufWriter<File>,
         ) -> std::io::Result<()>,
     {
-        let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
+        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_result;
 
         // make sure that the output directory exists
         std::fs::create_dir_all(output_dir)?;
@@ -501,7 +495,7 @@ pub mod output {
     }
 
     fn print_entire_report_to_writer<W, F0, F1>(
-        kpi_result: &KpiResult,
+        kpi_result: &KpiData,
         mut out: W,
         print_single_tracker: F0,
         print_red_flags: F1,
@@ -522,7 +516,7 @@ pub mod output {
             &'w mut W,
         ) -> std::io::Result<()>,
     {
-        let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
+        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_result;
 
         // print the trackers
         for (rep, stats) in stats_by_rep {
@@ -536,7 +530,7 @@ pub mod output {
     }
 
     pub fn generate_report_google_sheets(
-        kpi_result: &KpiResult,
+        kpi_result: &KpiData,
         spreadsheet_id: Option<&str>,
     ) -> anyhow::Result<()> {
         fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
@@ -548,7 +542,7 @@ pub mod output {
             }
         }
 
-        let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
+        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_result;
 
         // create a stats sheet for each rep
         let mut sheets: Vec<_> = stats_by_rep

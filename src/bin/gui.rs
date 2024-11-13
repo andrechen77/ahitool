@@ -1,18 +1,46 @@
-use ahitool::{apis::job_nimbus, tools};
+use ahitool::{
+    apis::job_nimbus,
+    tools::{self, kpi::KpiData},
+};
 use chrono::{DateTime, Utc};
 use eframe::egui;
+use tokio::sync::watch;
 use tracing::warn;
+
+mod resource {
+    use std::sync::OnceLock;
+    use tokio::runtime;
+
+    pub fn runtime() -> &'static runtime::Runtime {
+        static RUNTIME: OnceLock<runtime::Runtime> = OnceLock::new();
+        let rt = RUNTIME
+            .get_or_init(|| runtime::Builder::new_multi_thread().enable_all().build().unwrap());
+        rt
+    }
+
+    pub fn client() -> reqwest::Client {
+        static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+        let client = CLIENT.get_or_init(|| reqwest::Client::new());
+        client.clone()
+    }
+}
 
 fn main() {
     // set up tracing
     tracing_subscriber::fmt::init();
 
-    eframe::run_native(
+    // make sure the runtime is initialized
+    resource::runtime();
+
+    // run the UI on the main thread
+    let result = eframe::run_native(
         "AHItool",
         Default::default(),
         Box::new(|_cc| Ok(Box::new(AhitoolApp::default()))),
-    )
-    .unwrap();
+    );
+    if let Err(e) = result {
+        warn!("error in UI thread: {}", e);
+    }
 }
 
 #[derive(Default)]
@@ -31,22 +59,6 @@ enum AhitoolTool {
 
 impl eframe::App for AhitoolApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Draw the menu bar at the top
-        // egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-        //     egui::menu::bar(ui, |ui| {
-        //         ui.menu_button("Tools", |ui| {
-        //             if ui.button("KPI").clicked() {
-        //                 self.current_tool = AhitoolTool::Kpi;
-        //                 ui.close_menu();
-        //             }
-        //             if ui.button("AR").clicked() {
-        //                 self.current_tool = AhitoolTool::Ar;
-        //                 ui.close_menu();
-        //             }
-        //         });
-        //     });
-        // });
-
         egui::CentralPanel::default().show(ctx, |ui| {
             // heading to display and choose the current tool
             let heading = ui.heading(match self.current_tool {
@@ -85,12 +97,60 @@ impl eframe::App for AhitoolApp {
     }
 }
 
-#[derive(Default)]
 struct KpiPage {
     show_api_key: bool,
     jn_api_key: String,
-    last_fetched: Option<DateTime<Utc>>,
+    loading_kpi_result: bool,
+    kpi_result_tx: watch::Sender<Option<KpiResult>>,
+    kpi_result_rx: watch::Receiver<Option<KpiResult>>,
+}
+
+impl Default for KpiPage {
+    fn default() -> Self {
+        let (tx, rx) = watch::channel(None);
+        KpiPage {
+            show_api_key: false,
+            jn_api_key: String::new(),
+            loading_kpi_result: false,
+            kpi_result_tx: tx,
+            kpi_result_rx: rx,
+        }
+    }
+}
+
+struct KpiResult {
+    last_fetched: DateTime<Utc>,
+    #[allow(dead_code)]
+    data: KpiData,
     report: String,
+}
+
+async fn fetch_kpi_result(jn_api_key: String, answerer: watch::Sender<Option<KpiResult>>) {
+    let answer = match job_nimbus::get_all_jobs_from_job_nimbus(resource::client(), &jn_api_key, None).await {
+        Ok(jobs) => {
+            let last_fetched = Utc::now();
+            let kpi_result = tools::kpi::calculate_kpi(jobs, (None, None));
+            let mut output = Vec::new();
+            let mut report = String::new();
+            match tools::kpi::output::human::print_entire_report_to_writer(&kpi_result, &mut output)
+            {
+                Ok(_) => {
+                    report = String::from_utf8(output).expect("output should be valid UTF-8");
+                }
+                Err(e) => {
+                    warn!("error formatting KPI report: {}", e);
+                }
+            }
+            Some(KpiResult { last_fetched, data: kpi_result, report })
+        }
+        Err(e) => {
+            warn!("error fetching jobs: {}", e);
+            None
+        }
+    };
+    if let Err(e) = answerer.send(answer) {
+        warn!("internal communication error: {}", e);
+    }
 }
 
 fn kpi_page(ui: &mut egui::Ui, state: &mut KpiPage) {
@@ -102,39 +162,31 @@ fn kpi_page(ui: &mut egui::Ui, state: &mut KpiPage) {
             ui.label("********");
         }
     });
-    ui.horizontal(|ui| {
-        if ui.button("Fetch Jobs").clicked() {
-            match job_nimbus::get_all_jobs_from_job_nimbus(&state.jn_api_key, None) {
-                Ok(jobs) => {
-                    state.last_fetched = Some(Utc::now());
-                    let kpi_result = tools::kpi::calculate_kpi(jobs, (None, None));
 
-                    let mut output = Vec::new();
-                    match tools::kpi::output::human::print_entire_report_to_writer(
-                        &kpi_result,
-                        &mut output,
-                    ) {
-                        Ok(_) => {
-                            state.report =
-                                String::from_utf8(output).expect("output should be valid UTF-8");
-                        }
-                        Err(e) => {
-                            warn!("error formatting KPI report: {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("error fetching jobs: {}", e);
-                }
-            }
+    if let Ok(true) = state.kpi_result_rx.has_changed() {
+        state.loading_kpi_result = false;
+    }
+    let kpi_result = state.kpi_result_rx.borrow_and_update();
+
+    ui.horizontal(|ui| {
+        if state.loading_kpi_result {
+            ui.label("Loading...");
+        } else if ui.button("Fetch Jobs").clicked() {
+            state.loading_kpi_result = true;
+            resource::runtime()
+                .spawn(fetch_kpi_result(state.jn_api_key.clone(), state.kpi_result_tx.clone()));
         }
         ui.label(format!(
             "Last fetched: {}",
-            state.last_fetched.map(|d| d.time().to_string()).as_deref().unwrap_or("never")
+            kpi_result
+                .as_ref()
+                .map(|d| d.last_fetched.time().to_string())
+                .as_deref()
+                .unwrap_or("never")
         ));
     });
     ui.separator();
     egui::ScrollArea::vertical().show(ui, |ui| {
-        ui.label(&state.report);
+        ui.label(kpi_result.as_ref().map(|d| d.report.as_str()).unwrap_or("No data"));
     });
 }
