@@ -1,11 +1,16 @@
 use std::{fs::File, io::Write};
 
-use ahitool::{apis::{google_sheets::{self, SheetNickname}, job_nimbus}, tools};
+use ahitool::{
+    apis::{
+        google_sheets::{self, SheetNickname},
+        job_nimbus,
+    },
+    tools,
+};
 use clap::CommandFactory as _;
 use tracing::{info, warn};
 
 use crate::CliArgs;
-
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -49,7 +54,7 @@ enum OutputSpec<'s> {
         /// The Google Sheets ID to update. If `None`, then a new Google Sheet
         /// will be created.
         spreadsheet_id: Option<&'s str>,
-    }
+    },
 }
 
 pub fn main(args: Args) -> anyhow::Result<()> {

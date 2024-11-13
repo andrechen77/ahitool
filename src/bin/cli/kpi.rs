@@ -1,6 +1,12 @@
 use std::{io::Write, path::Path};
 
-use ahitool::{apis::{google_sheets::{self, SheetNickname}, job_nimbus}, tools};
+use ahitool::{
+    apis::{
+        google_sheets::{self, SheetNickname},
+        job_nimbus,
+    },
+    tools,
+};
 use chrono::{Datelike as _, NaiveDate, NaiveDateTime, NaiveTime, TimeZone as _, Utc};
 use clap::CommandFactory as _;
 use tracing::{info, warn};
@@ -83,7 +89,7 @@ pub enum OutputSpec<'s> {
         /// The Google Sheets ID to update. If `None`, then a new Google Sheet
         /// will be created.
         spreadsheet_id: Option<&'s str>,
-    }
+    },
 }
 
 pub fn main(args: Args) -> anyhow::Result<()> {
@@ -95,18 +101,14 @@ pub fn main(args: Args) -> anyhow::Result<()> {
     // parse the output format
     let s: String; // to hold the result of parsing the known sheets file for lifetime reasons only
     let output_spec = match format {
-        CliOutputFormat::Human => {
-            match output.as_deref() {
-                Some("-") | None => OutputSpec::HumanIntoSingleFile(Box::new(std::io::stdout())),
-                Some(dir) => OutputSpec::HumanIntoDirectory(Path::new(dir)),
-            }
-        }
-        CliOutputFormat::Csv => {
-            match output.as_deref() {
-                Some("-") | None => OutputSpec::CsvIntoSingleFile(Box::new(std::io::stdout())),
-                Some(dir) => OutputSpec::CsvIntoDirectory(Path::new(dir)),
-            }
-        }
+        CliOutputFormat::Human => match output.as_deref() {
+            Some("-") | None => OutputSpec::HumanIntoSingleFile(Box::new(std::io::stdout())),
+            Some(dir) => OutputSpec::HumanIntoDirectory(Path::new(dir)),
+        },
+        CliOutputFormat::Csv => match output.as_deref() {
+            Some("-") | None => OutputSpec::CsvIntoSingleFile(Box::new(std::io::stdout())),
+            Some(dir) => OutputSpec::CsvIntoDirectory(Path::new(dir)),
+        },
         CliOutputFormat::GoogleSheets => {
             let spreadsheet_id = match output.as_deref() {
                 Some(spreadsheet_id) => Some(spreadsheet_id),

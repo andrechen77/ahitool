@@ -30,7 +30,9 @@ pub struct AccRecvableData<'a> {
     categorized_jobs: HashMap<Status, (i32, Vec<&'a Job>)>,
 }
 
-pub fn calculate_acc_receivable<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> AccRecvableData<'a> {
+pub fn calculate_acc_receivable<'a>(
+    jobs: impl IntoIterator<Item = &'a Job>,
+) -> AccRecvableData<'a> {
     let mut results = AccRecvableData { total: 0, categorized_jobs: HashMap::new() };
     for category in CATEGORIES_WE_CARE_ABOUT {
         results.categorized_jobs.insert(category.clone(), (0, Vec::new()));
@@ -67,7 +69,11 @@ pub fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io
             writeln!(
                 writer,
                 "        - {} (#{}): ${:.2} ({} days, assigned to {})",
-                name, number, amount_receivable, days_in_status, job.sales_rep.as_deref().unwrap_or("Unknown Sales Rep")
+                name,
+                number,
+                amount_receivable,
+                days_in_status,
+                job.sales_rep.as_deref().unwrap_or("Unknown Sales Rep")
             )?;
         }
     }
@@ -80,7 +86,11 @@ pub fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io
         writeln!(
             writer,
             "    - {} (#{}): ({} for {} days, assigned to {})",
-            name, number, job.status, days_in_status, job.sales_rep.as_deref().unwrap_or("Unknown Sales Rep")
+            name,
+            number,
+            job.status,
+            days_in_status,
+            job.sales_rep.as_deref().unwrap_or("Unknown Sales Rep")
         )?;
     }
 
@@ -90,7 +100,14 @@ pub fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io
 pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Result<()> {
     let mut writer = csv::Writer::from_writer(writer);
     writer
-        .write_record(&["Job Name", "Sales Rep", "Job Number", "Job Status", "Amount", "Days In Status"])
+        .write_record(&[
+            "Job Name",
+            "Sales Rep",
+            "Job Number",
+            "Job Status",
+            "Amount",
+            "Days In Status",
+        ])
         .unwrap();
     for (_status, (_category_total, jobs)) in &results.categorized_jobs {
         for job in jobs {
@@ -180,12 +197,7 @@ pub fn generate_report_google_sheets(
             async move {
                 let spreadsheet = spreadsheet.clone();
                 if let Some(spreadsheet_id) = spreadsheet_id {
-                    google_sheets::update_spreadsheet(
-                        &token,
-                        spreadsheet_id,
-                        spreadsheet,
-                    )
-                    .await
+                    google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet).await
                 } else {
                     google_sheets::create_spreadsheet(
                         &token,

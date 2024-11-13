@@ -99,12 +99,15 @@ mod processing {
                                 &analysis.timestamps,
                                 analysis.loss_timestamp,
                             );
-                        trackers.entry(target.clone()).or_insert_with(job_tracker::build_job_tracker).add_job(
-                            &analyzed,
-                            kind,
-                            &analysis.timestamps,
-                            analysis.loss_timestamp,
-                        );
+                        trackers
+                            .entry(target.clone())
+                            .or_insert_with(job_tracker::build_job_tracker)
+                            .add_job(
+                                &analyzed,
+                                kind,
+                                &analysis.timestamps,
+                                analysis.loss_timestamp,
+                            );
                     }
                 }
             }
@@ -240,7 +243,10 @@ mod processing {
 
 pub mod output {
     use std::{
-        fs::File, io::{BufWriter, Write}, path::Path, rc::Rc
+        fs::File,
+        io::{BufWriter, Write},
+        path::Path,
+        rc::Rc,
     };
 
     use chrono::Utc;
@@ -257,15 +263,20 @@ pub mod output {
         utils,
     };
 
-    use super::{processing::JobTrackerStats, KpiResult, KpiSubject, csv_crate};
+    use super::{csv_crate, processing::JobTrackerStats, KpiResult, KpiSubject};
 
     pub mod human {
         use std::collections::btree_map;
 
         use super::*;
 
-        pub fn print_single_tracker<'a, 'b, 'w, W>(subject: &'a KpiSubject, stats: &'b JobTrackerStats, out: &'w mut W) -> std::io::Result<()>
-        where W: Write
+        pub fn print_single_tracker<'a, 'b, 'w, W>(
+            subject: &'a KpiSubject,
+            stats: &'b JobTrackerStats,
+            out: &'w mut W,
+        ) -> std::io::Result<()>
+        where
+            W: Write,
         {
             writeln!(out, "Tracker for {}: ================", subject)?;
             writeln!(out, "Appts {} | Installed {}", stats.appt_count, stats.install_count)?;
@@ -294,8 +305,12 @@ pub mod output {
         }
 
         pub fn print_red_flags<'a, 'w, W>(
-            red_flags_by_rep: btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
-            out: &'w mut W
+            red_flags_by_rep: btree_map::Iter<
+                'a,
+                KpiSubject,
+                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+            >,
+            out: &'w mut W,
         ) -> std::io::Result<()>
         where
             W: Write,
@@ -314,13 +329,31 @@ pub mod output {
             Ok(())
         }
 
-        pub fn print_entire_report_directory(kpi_result: &KpiResult, output_dir: &Path) -> std::io::Result<()> {
-            super::print_entire_report_directory(kpi_result, output_dir, print_single_tracker, print_red_flags)
+        pub fn print_entire_report_directory(
+            kpi_result: &KpiResult,
+            output_dir: &Path,
+        ) -> std::io::Result<()> {
+            super::print_entire_report_directory(
+                kpi_result,
+                output_dir,
+                print_single_tracker,
+                print_red_flags,
+            )
         }
 
-        pub fn print_entire_report_to_writer<W>(kpi_result: &KpiResult, out: W) -> std::io::Result<()>
-        where W: Write {
-            super::print_entire_report_to_writer(kpi_result, out, print_single_tracker, print_red_flags)
+        pub fn print_entire_report_to_writer<W>(
+            kpi_result: &KpiResult,
+            out: W,
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
+            super::print_entire_report_to_writer(
+                kpi_result,
+                out,
+                print_single_tracker,
+                print_red_flags,
+            )
         }
     }
 
@@ -329,8 +362,14 @@ pub mod output {
 
         use super::*;
 
-        pub fn print_single_tracker<'a, 'b, 'w, W>(_subject: &'a KpiSubject, stats: &'b JobTrackerStats, out: &'w mut W) -> std::io::Result<()>
-        where W: Write {
+        pub fn print_single_tracker<'a, 'b, 'w, W>(
+            _subject: &'a KpiSubject,
+            stats: &'b JobTrackerStats,
+            out: &'w mut W,
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
             let mut writer = csv_crate::Writer::from_writer(out);
             writer.write_record(&["Conversion", "Rate", "Total", "Avg Time (days)", "Jobs"])?;
             for (name, conv_stats) in [
@@ -361,8 +400,12 @@ pub mod output {
         }
 
         pub fn print_red_flags<'a, 'w, W>(
-            red_flags_by_rep: btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
-            out: &'w mut W
+            red_flags_by_rep: btree_map::Iter<
+                'a,
+                KpiSubject,
+                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+            >,
+            out: &'w mut W,
         ) -> std::io::Result<()>
         where
             W: Write,
@@ -381,13 +424,31 @@ pub mod output {
             Ok(())
         }
 
-        pub fn print_entire_report_directory(kpi_result: &KpiResult, output_dir: &Path) -> std::io::Result<()> {
-            super::print_entire_report_directory(kpi_result, output_dir, print_single_tracker, print_red_flags)
+        pub fn print_entire_report_directory(
+            kpi_result: &KpiResult,
+            output_dir: &Path,
+        ) -> std::io::Result<()> {
+            super::print_entire_report_directory(
+                kpi_result,
+                output_dir,
+                print_single_tracker,
+                print_red_flags,
+            )
         }
 
-        pub fn print_entire_report_to_writer<W>(kpi_result: &KpiResult, out: W) -> std::io::Result<()>
-        where W: Write {
-            super::print_entire_report_to_writer(kpi_result, out, print_single_tracker, print_red_flags)
+        pub fn print_entire_report_to_writer<W>(
+            kpi_result: &KpiResult,
+            out: W,
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
+            super::print_entire_report_to_writer(
+                kpi_result,
+                out,
+                print_single_tracker,
+                print_red_flags,
+            )
         }
     }
 
@@ -398,8 +459,19 @@ pub mod output {
         print_red_flags: F1,
     ) -> std::io::Result<()>
     where
-        F0: for<'a, 'b, 'w> Fn(&'a KpiSubject, &'b JobTrackerStats, &'w mut BufWriter<File>) -> std::io::Result<()>,
-        F1: for<'a, 'w> Fn(std::collections::btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>, &'w mut BufWriter<File>) -> std::io::Result<()>,
+        F0: for<'a, 'b, 'w> Fn(
+            &'a KpiSubject,
+            &'b JobTrackerStats,
+            &'w mut BufWriter<File>,
+        ) -> std::io::Result<()>,
+        F1: for<'a, 'w> Fn(
+            std::collections::btree_map::Iter<
+                'a,
+                KpiSubject,
+                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+            >,
+            &'w mut BufWriter<File>,
+        ) -> std::io::Result<()>,
     {
         let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
 
@@ -418,7 +490,8 @@ pub mod output {
 
         // print the red flags
         let mut out_file = BufWriter::new(
-            std::fs::File::create(output_dir.join("red-flags.txt")).expect("the directory should exist"),
+            std::fs::File::create(output_dir.join("red-flags.txt"))
+                .expect("the directory should exist"),
         );
         print_red_flags(red_flags_by_rep.iter(), &mut out_file)?;
         out_file.flush()?;
@@ -434,8 +507,19 @@ pub mod output {
     ) -> std::io::Result<()>
     where
         W: Write,
-        F0: for<'a, 'b, 'w> Fn(&'a KpiSubject, &'b JobTrackerStats, &'w mut W) -> std::io::Result<()>,
-        F1: for<'a, 'w> Fn(std::collections::btree_map::Iter<'a, KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>, &'w mut W) -> std::io::Result<()>,
+        F0: for<'a, 'b, 'w> Fn(
+            &'a KpiSubject,
+            &'b JobTrackerStats,
+            &'w mut W,
+        ) -> std::io::Result<()>,
+        F1: for<'a, 'w> Fn(
+            std::collections::btree_map::Iter<
+                'a,
+                KpiSubject,
+                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+            >,
+            &'w mut W,
+        ) -> std::io::Result<()>,
     {
         let KpiResult { stats_by_rep, red_flags_by_rep } = kpi_result;
 
@@ -448,7 +532,6 @@ pub mod output {
         print_red_flags(red_flags_by_rep.iter(), &mut out)?;
         Ok(())
     }
-
 
     pub fn generate_report_google_sheets(
         kpi_result: &KpiResult,
@@ -549,33 +632,29 @@ pub mod output {
             ..Default::default()
         };
 
-        let url =
-            tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(
-                google_sheets::run_with_credentials(|token| {
-                    // FIXME cloning the token is a workaround because I can't
-                    // get lifetimes to work correctly in run_with_credentials
-                    let token = token.clone();
-                    let spreadsheet = &spreadsheet;
-                    async move {
-                        let spreadsheet = spreadsheet.clone();
-                        if let Some(spreadsheet_id) = spreadsheet_id {
-                            google_sheets::update_spreadsheet(
-                                &token,
-                                spreadsheet_id,
-                                spreadsheet,
-                            )
-                            .await
-                        } else {
-                            google_sheets::create_spreadsheet(
-                                &token,
-                                google_sheets::SheetNickname::Kpi,
-                                spreadsheet,
-                            )
-                            .await
-                        }
+        let url = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(google_sheets::run_with_credentials(|token| {
+                // FIXME cloning the token is a workaround because I can't
+                // get lifetimes to work correctly in run_with_credentials
+                let token = token.clone();
+                let spreadsheet = &spreadsheet;
+                async move {
+                    let spreadsheet = spreadsheet.clone();
+                    if let Some(spreadsheet_id) = spreadsheet_id {
+                        google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet).await
+                    } else {
+                        google_sheets::create_spreadsheet(
+                            &token,
+                            google_sheets::SheetNickname::Kpi,
+                            spreadsheet,
+                        )
+                        .await
                     }
-                }),
-            )?;
+                }
+            }))?;
         utils::open_url(url.as_str());
         Ok(())
     }

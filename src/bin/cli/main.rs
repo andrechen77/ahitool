@@ -1,7 +1,7 @@
 use clap::Parser;
 
-mod kpi;
 mod acc_receivable;
+mod kpi;
 mod update;
 
 #[derive(Parser, Debug)]

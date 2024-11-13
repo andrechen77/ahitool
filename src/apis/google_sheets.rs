@@ -290,7 +290,10 @@ pub async fn update_spreadsheet(
 /// the spreadsheet ID.
 type KnownSheets<'a> = HashMap<SheetNickname, Cow<'a, str>>;
 
-pub fn update_known_sheets_file(nickname: SheetNickname, spreadsheet_id: &str) -> std::io::Result<()> {
+pub fn update_known_sheets_file(
+    nickname: SheetNickname,
+    spreadsheet_id: &str,
+) -> std::io::Result<()> {
     let path = Path::new(KNOWN_SHEETS_FILE);
 
     // deserialize the existing known sheets
