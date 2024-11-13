@@ -1,4 +1,4 @@
-use std::{io::Write, path::Path};
+use std::path::Path;
 
 use ahitool::{
     apis::{
@@ -7,6 +7,7 @@ use ahitool::{
     },
     tools,
 };
+use anyhow::bail;
 use chrono::{Datelike as _, NaiveDate, NaiveDateTime, NaiveTime, TimeZone as _, Utc};
 use clap::CommandFactory as _;
 use tracing::{info, warn};
@@ -75,12 +76,12 @@ enum CliOutputFormat {
 
 pub enum OutputSpec<'s> {
     /// Prints a human-readable report into a write stream.
-    HumanIntoSingleFile(Box<dyn Write>),
+    HumanIntoSingleFile(Box<dyn std::io::Write + Send>),
     /// Prints a human-readable report into a directory, with each file
     /// corresponding to a sales rep.
     HumanIntoDirectory(&'s Path),
     /// Prints a CSV file into a write stream.
-    CsvIntoSingleFile(Box<dyn Write>),
+    CsvIntoSingleFile(Box<dyn std::io::Write + Send>),
     /// Prints a CSV file into a directory, with each file corresponding to a
     /// sales rep.
     CsvIntoDirectory(&'s Path),
@@ -92,31 +93,31 @@ pub enum OutputSpec<'s> {
     },
 }
 
-pub fn main(args: Args) -> anyhow::Result<()> {
+pub async fn main(args: Args) -> anyhow::Result<()> {
     let Args { jn_api_key, filter_filename, from_date, to_date, format, output, new } = args;
 
     // get the JobNimbus API key
-    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
+    let jn_api_key = job_nimbus::get_api_key(jn_api_key).await?;
 
     // parse the output format
-    let s: String; // to hold the result of parsing the known sheets file for lifetime reasons only
+    let output: Option<&'static str> = output.map(|s| &*s.leak());
     let output_spec = match format {
-        CliOutputFormat::Human => match output.as_deref() {
+        CliOutputFormat::Human => match output {
             Some("-") | None => OutputSpec::HumanIntoSingleFile(Box::new(std::io::stdout())),
             Some(dir) => OutputSpec::HumanIntoDirectory(Path::new(dir)),
         },
-        CliOutputFormat::Csv => match output.as_deref() {
+        CliOutputFormat::Csv => match output {
             Some("-") | None => OutputSpec::CsvIntoSingleFile(Box::new(std::io::stdout())),
             Some(dir) => OutputSpec::CsvIntoDirectory(Path::new(dir)),
         },
         CliOutputFormat::GoogleSheets => {
-            let spreadsheet_id = match output.as_deref() {
+            let spreadsheet_id = match output {
                 Some(spreadsheet_id) => Some(spreadsheet_id),
                 None => {
                     if new {
                         None
                     } else {
-                        match google_sheets::read_known_sheets_file(SheetNickname::Kpi) {
+                        match google_sheets::read_known_sheets_file(SheetNickname::Kpi).await {
                             Err(e) => {
                                 warn!("failed to read known sheets file: {}", e);
                                 None
@@ -126,9 +127,12 @@ pub fn main(args: Args) -> anyhow::Result<()> {
                                 None
                             }
                             Ok(Some(spreadsheet_id)) => {
-                                s = spreadsheet_id;
-                                info!("data will be output to a existing sheet with ID {}", &s);
-                                Some(s.as_str())
+                                let spreadsheet_id = &*spreadsheet_id.leak();
+                                info!(
+                                    "data will be output to a existing sheet with ID {}",
+                                    spreadsheet_id
+                                );
+                                Some(spreadsheet_id)
                             }
                         }
                     }
@@ -138,17 +142,16 @@ pub fn main(args: Args) -> anyhow::Result<()> {
         }
     };
     if format != CliOutputFormat::GoogleSheets && new {
-        CliArgs::command()
-            .error(
-                clap::error::ErrorKind::ArgumentConflict,
-                "The `--new` option can only be used with `--format google-sheets`",
-            )
-            .exit();
+        let err = CliArgs::command().error(
+            clap::error::ErrorKind::ArgumentConflict,
+            "The `--new` option can only be used with `--format google-sheets`",
+        );
+        bail!(err);
     }
 
     // get the filter to use with the query
     let filter = if let Some(filter_filename) = filter_filename {
-        Some(std::fs::read_to_string(filter_filename)?)
+        Some(tokio::fs::read_to_string(filter_filename).await?)
     } else {
         None
     };
@@ -164,61 +167,71 @@ pub fn main(args: Args) -> anyhow::Result<()> {
             )),
         ),
         "today" => Some(Utc::now()),
-        date_string => Some(
-            NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
-                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)))
-                .unwrap_or_else(|_| {
-                    CliArgs::command()
-                        .error(
-                            clap::error::ErrorKind::ArgumentConflict,
-                            "Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'",
-                        )
-                        .exit();
-                }),
-        ),
+        date_string => {
+            let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
+                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
+            if let Ok(date) = date {
+                Some(date)
+            } else {
+                let err = CliArgs::command().error(
+                    clap::error::ErrorKind::ArgumentConflict,
+                    "Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'",
+                );
+                bail!(err);
+            }
+        }
     };
     let to_date = match to_date.as_str() {
         "forever" => None,
         "today" => Some(Utc::now()),
-        date_string => Some(
-            NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
-                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)))
-                .unwrap_or_else(|_| {
-                    CliArgs::command()
-                        .error(
-                            clap::error::ErrorKind::ArgumentConflict,
-                            "Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'",
-                        )
-                        .exit();
-                }),
-        ),
+        date_string => {
+            let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
+                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
+            if let Ok(date) = date {
+                Some(date)
+            } else {
+                let err = CliArgs::command().error(
+                    clap::error::ErrorKind::ArgumentConflict,
+                    "Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'",
+                );
+                bail!(err);
+            }
+        }
     };
 
     // do the processing
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, filter.as_deref())?;
-    let kpi_result = tools::kpi::calculate_kpi(jobs, (from_date, to_date));
+    let client = reqwest::Client::new();
+    let jobs =
+        job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, filter.as_deref()).await?;
+    let kpi_result =
+        tokio::task::spawn_blocking(move || tools::kpi::calculate_kpi(jobs, (from_date, to_date)))
+            .await?;
 
     // output the results
     use tools::kpi::output;
-    match output_spec {
-        OutputSpec::HumanIntoSingleFile(mut writer) => {
-            output::human::print_entire_report_to_writer(&kpi_result, &mut writer)?;
-            writer.flush()?;
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        match output_spec {
+            OutputSpec::HumanIntoSingleFile(mut writer) => {
+                output::human::print_entire_report_to_writer(&kpi_result, &mut writer)?;
+                writer.flush()?;
+            }
+            OutputSpec::HumanIntoDirectory(dir) => {
+                output::human::print_entire_report_directory(&kpi_result, dir)?;
+            }
+            OutputSpec::CsvIntoSingleFile(mut writer) => {
+                output::csv::print_entire_report_to_writer(&kpi_result, &mut writer)?;
+                writer.flush()?;
+            }
+            OutputSpec::CsvIntoDirectory(dir) => {
+                output::csv::print_entire_report_directory(&kpi_result, dir)?;
+            }
+            OutputSpec::GoogleSheets { spreadsheet_id } => {
+                output::generate_report_google_sheets(&kpi_result, spreadsheet_id)?;
+            }
         }
-        OutputSpec::HumanIntoDirectory(dir) => {
-            output::human::print_entire_report_directory(&kpi_result, dir)?;
-        }
-        OutputSpec::CsvIntoSingleFile(mut writer) => {
-            output::csv::print_entire_report_to_writer(&kpi_result, &mut writer)?;
-            writer.flush()?;
-        }
-        OutputSpec::CsvIntoDirectory(dir) => {
-            output::csv::print_entire_report_directory(&kpi_result, dir)?;
-        }
-        OutputSpec::GoogleSheets { spreadsheet_id } => {
-            output::generate_report_google_sheets(&kpi_result, spreadsheet_id)?;
-        }
-    }
+        Ok(())
+    })
+    .await??;
 
     Ok(())
 }

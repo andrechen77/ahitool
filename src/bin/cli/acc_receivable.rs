@@ -1,5 +1,3 @@
-use std::{fs::File, io::Write};
-
 use ahitool::{
     apis::{
         google_sheets::{self, SheetNickname},
@@ -47,9 +45,9 @@ enum CliOutputFormat {
 
 enum OutputSpec<'s> {
     /// Prints a human-readable report into the write stream.
-    Human(Box<dyn Write>),
+    Human(Box<dyn std::io::Write + Send>),
     /// Prints a CSV file into the write stream.
-    Csv(Box<dyn Write>),
+    Csv(Box<dyn std::io::Write + Send>),
     GoogleSheets {
         /// The Google Sheets ID to update. If `None`, then a new Google Sheet
         /// will be created.
@@ -57,19 +55,19 @@ enum OutputSpec<'s> {
     },
 }
 
-pub fn main(args: Args) -> anyhow::Result<()> {
+pub async fn main(args: Args) -> anyhow::Result<()> {
     let Args { jn_api_key, output, format, new } = args;
 
     // get the JobNimbus API key
-    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
+    let jn_api_key = job_nimbus::get_api_key(jn_api_key).await?;
 
     // parse the output
-    let s: String; // to hold the result of parsing the known sheets file for lifetime reasons only
+    let output: Option<&'static str> = output.map(|s| &*s.leak());
     let output_spec = match format {
         CliOutputFormat::Human | CliOutputFormat::Csv => {
-            let writer: Box<dyn Write> = match output.as_deref() {
+            let writer: Box<dyn std::io::Write + Send> = match output {
                 None | Some("-") => Box::new(std::io::stdout()),
-                Some(_) => Box::new(File::create(output.expect("checked was some"))?),
+                Some(_) => Box::new(std::fs::File::create(output.expect("checked was some"))?),
             };
             if format == CliOutputFormat::Human {
                 OutputSpec::Human(writer)
@@ -78,13 +76,15 @@ pub fn main(args: Args) -> anyhow::Result<()> {
             }
         }
         CliOutputFormat::GoogleSheets => {
-            let spreadsheet_id = match output.as_deref() {
+            let spreadsheet_id = match output {
                 Some(spreadsheet_id) => Some(spreadsheet_id),
                 None => {
                     if new {
                         None
                     } else {
-                        match google_sheets::read_known_sheets_file(SheetNickname::AccReceivable) {
+                        match google_sheets::read_known_sheets_file(SheetNickname::AccReceivable)
+                            .await
+                        {
                             Err(e) => {
                                 warn!("failed to read known sheets file: {}", e);
                                 None
@@ -94,9 +94,12 @@ pub fn main(args: Args) -> anyhow::Result<()> {
                                 None
                             }
                             Ok(Some(spreadsheet_id)) => {
-                                s = spreadsheet_id;
-                                info!("data will be output to a existing sheet with ID {}", &s);
-                                Some(s.as_str())
+                                let spreadsheet_id = &*spreadsheet_id.leak();
+                                info!(
+                                    "data will be output to a existing sheet with ID {}",
+                                    &spreadsheet_id
+                                );
+                                Some(spreadsheet_id)
                             }
                         }
                     }
@@ -114,24 +117,30 @@ pub fn main(args: Args) -> anyhow::Result<()> {
             .exit();
     }
 
-    // do the processing
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, None)?;
-    let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs.iter());
+    let client = reqwest::Client::new();
+    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, None).await?;
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs.iter());
 
-    // output the results
-    match output_spec {
-        OutputSpec::Human(mut writer) => {
-            tools::acc_receivable::print_human(&acc_recv_data, &mut writer)?;
-            writer.flush()?;
+        match output_spec {
+            OutputSpec::Human(mut writer) => {
+                tools::acc_receivable::print_human(&acc_recv_data, &mut writer)?;
+                writer.flush()?;
+            }
+            OutputSpec::Csv(mut writer) => {
+                tools::acc_receivable::print_csv(&acc_recv_data, &mut writer)?;
+                writer.flush()?;
+            }
+            OutputSpec::GoogleSheets { spreadsheet_id } => {
+                tools::acc_receivable::generate_report_google_sheets(
+                    &acc_recv_data,
+                    spreadsheet_id,
+                )?;
+            }
         }
-        OutputSpec::Csv(mut writer) => {
-            tools::acc_receivable::print_csv(&acc_recv_data, &mut writer)?;
-            writer.flush()?;
-        }
-        OutputSpec::GoogleSheets { spreadsheet_id } => {
-            tools::acc_receivable::generate_report_google_sheets(&acc_recv_data, spreadsheet_id)?;
-        }
-    }
+        Ok(())
+    })
+    .await??;
 
     Ok(())
 }

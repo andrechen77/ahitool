@@ -1,9 +1,9 @@
-use std::{fmt::Display, rc::Rc, usize};
+use std::{fmt::Display, sync::Arc, usize};
 
 use crate::jobs::{AnalyzedJob, JobKind, Milestone, TimeDelta, Timestamp};
 
 pub type JobTracker3x5 =
-    JobTracker<{ JobKind::NUM_VARIANTS }, { Milestone::NUM_VARIANTS }, Rc<AnalyzedJob>>;
+    JobTracker<{ JobKind::NUM_VARIANTS }, { Milestone::NUM_VARIANTS }, Arc<AnalyzedJob>>;
 
 pub fn build_job_tracker() -> JobTracker3x5 {
     JobTracker::new([

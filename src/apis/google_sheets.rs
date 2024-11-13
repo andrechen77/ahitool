@@ -3,9 +3,8 @@ pub mod spreadsheet;
 
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::fs::File;
 
-use std::io::BufWriter;
+use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::anyhow;
@@ -22,7 +21,6 @@ use spreadsheet::GridCoordinate;
 use spreadsheet::SheetProperties;
 use spreadsheet::Spreadsheet;
 use std::collections::HashMap;
-use std::io::BufReader;
 use tracing::debug;
 use tracing::info;
 use tracing::trace;
@@ -40,7 +38,7 @@ pub async fn create_or_write_spreadsheet(
     nickname: SheetNickname,
     spreadsheet: Spreadsheet,
 ) -> Result<String, TryWithCredentialsError> {
-    let known_sheet = match read_known_sheets_file(nickname) {
+    let known_sheet = match read_known_sheets_file(nickname).await {
         Err(e) => {
             warn!("Failed to read known sheets file: {}", e);
             None
@@ -104,7 +102,7 @@ pub async fn create_spreadsheet(
         "Saving the spreadsheet under the nickname {}",
         serde_json::to_string(&nickname).expect("should work")
     );
-    if let Err(e) = update_known_sheets_file(nickname, &spreadsheet_id) {
+    if let Err(e) = update_known_sheets_file(nickname, &spreadsheet_id).await {
         warn!("Failed to update known sheets file: {}", e);
     };
 
@@ -290,16 +288,15 @@ pub async fn update_spreadsheet(
 /// the spreadsheet ID.
 type KnownSheets<'a> = HashMap<SheetNickname, Cow<'a, str>>;
 
-pub fn update_known_sheets_file(
+pub async fn update_known_sheets_file(
     nickname: SheetNickname,
     spreadsheet_id: &str,
 ) -> std::io::Result<()> {
     let path = Path::new(KNOWN_SHEETS_FILE);
 
     // deserialize the existing known sheets
-    let mut known_sheets: KnownSheets = if let Ok(file) = File::open(path) {
-        let reader = BufReader::new(file);
-        match serde_json::from_reader(reader) {
+    let mut known_sheets: KnownSheets = if let Ok(file_contents) = tokio::fs::read(path).await {
+        match serde_json::from_reader(Cursor::new(file_contents)) {
             Ok(sheets) => sheets,
             Err(e) => {
                 warn!("failed to deserialize known sheets file: {}", e);
@@ -314,17 +311,18 @@ pub fn update_known_sheets_file(
     known_sheets.insert(nickname, spreadsheet_id.into());
 
     // Serialize the updated known sheets back to the file
-    let writer = BufWriter::new(File::create(path)?);
-    serde_json::to_writer(writer, &known_sheets)?;
+    let mut buffer = Vec::new();
+    serde_json::to_writer(&mut buffer, &known_sheets)?;
+    tokio::fs::write(path, &buffer).await?;
 
     Ok(())
 }
 
 /// Reads the known sheets file and returns the value associated with the
 /// specified nickname.
-pub fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
-    let file = match File::open(KNOWN_SHEETS_FILE) {
-        Ok(file) => file,
+pub async fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
+    let file_contents = match tokio::fs::read(KNOWN_SHEETS_FILE).await {
+        Ok(file_contents) => file_contents,
         Err(e) => {
             if e.kind() != std::io::ErrorKind::NotFound {
                 warn!("Failed to open known sheets file: {}", e);
@@ -332,8 +330,7 @@ pub fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option
             return Ok(None);
         }
     };
-    let reader = BufReader::new(file);
-    let mut known_sheets: KnownSheets = serde_json::from_reader(reader)?;
+    let mut known_sheets: KnownSheets = serde_json::from_reader(Cursor::new(file_contents))?;
     Ok(known_sheets.remove(&nickname).map(Cow::into_owned))
 }
 

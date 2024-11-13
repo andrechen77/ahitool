@@ -7,7 +7,10 @@ pub struct Args {
     repo: String,
 }
 
-pub fn main(args: Args) -> anyhow::Result<()> {
+pub async fn main(args: Args) -> anyhow::Result<()> {
     let Args { repo } = args;
-    update_executable(&repo)
+    tokio::task::spawn_blocking(move || {
+        update_executable(&repo)
+    }).await??;
+    Ok(())
 }

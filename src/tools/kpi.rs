@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::jobs::AnalyzedJob;
 use crate::jobs::Job;
@@ -28,7 +28,7 @@ pub use processing::JobTrackerStats;
 
 pub struct KpiResult {
     pub stats_by_rep: BTreeMap<KpiSubject, JobTrackerStats>,
-    pub red_flags_by_rep: BTreeMap<KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
+    pub red_flags_by_rep: BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
 }
 
 pub fn calculate_kpi<'a>(
@@ -46,7 +46,7 @@ pub fn calculate_kpi<'a>(
 }
 
 mod processing {
-    use std::{collections::BTreeMap, rc::Rc};
+    use std::{collections::BTreeMap, sync::Arc};
 
     use tracing::info;
 
@@ -61,7 +61,7 @@ mod processing {
 
     type TrackersAndFlags = (
         BTreeMap<KpiSubject, JobTracker3x5>,
-        BTreeMap<KpiSubject, Vec<(Rc<AnalyzedJob>, JobAnalysisError)>>,
+        BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
     );
 
     pub fn process_jobs(
@@ -78,7 +78,7 @@ mod processing {
         let mut red_flags = BTreeMap::new();
         for job in jobs {
             let (analyzed, errors) = jobs::analyze_job(job);
-            let analyzed = Rc::new(analyzed);
+            let analyzed = Arc::new(analyzed);
             let target = match analyzed.job.sales_rep.clone() {
                 Some(name) => KpiSubject::SalesRep(name),
                 None => KpiSubject::UnknownSalesRep,
@@ -140,7 +140,7 @@ mod processing {
     #[derive(Debug)]
     pub struct ConversionStats {
         /// All the jobs that made the conversion.
-        pub achieved: Vec<Rc<AnalyzedJob>>,
+        pub achieved: Vec<Arc<AnalyzedJob>>,
         /// The rate of conversion. `None` if no jobs made the conversion.
         pub conversion_rate: Option<f64>,
         /// The average amount of time for a successful conversion. Zero if no
@@ -247,7 +247,7 @@ pub mod output {
         fs::File,
         io::{BufWriter, Write},
         path::Path,
-        rc::Rc,
+        sync::Arc,
     };
 
     use chrono::Utc;
@@ -309,7 +309,7 @@ pub mod output {
             red_flags_by_rep: btree_map::Iter<
                 'a,
                 KpiSubject,
-                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+                Vec<(Arc<AnalyzedJob>, JobAnalysisError)>,
             >,
             out: &'w mut W,
         ) -> std::io::Result<()>
@@ -404,7 +404,7 @@ pub mod output {
             red_flags_by_rep: btree_map::Iter<
                 'a,
                 KpiSubject,
-                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+                Vec<(Arc<AnalyzedJob>, JobAnalysisError)>,
             >,
             out: &'w mut W,
         ) -> std::io::Result<()>
@@ -469,7 +469,7 @@ pub mod output {
             std::collections::btree_map::Iter<
                 'a,
                 KpiSubject,
-                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+                Vec<(Arc<AnalyzedJob>, JobAnalysisError)>,
             >,
             &'w mut BufWriter<File>,
         ) -> std::io::Result<()>,
@@ -517,7 +517,7 @@ pub mod output {
             std::collections::btree_map::Iter<
                 'a,
                 KpiSubject,
-                Vec<(Rc<AnalyzedJob>, JobAnalysisError)>,
+                Vec<(Arc<AnalyzedJob>, JobAnalysisError)>,
             >,
             &'w mut W,
         ) -> std::io::Result<()>,
@@ -527,6 +527,7 @@ pub mod output {
         // print the trackers
         for (rep, stats) in stats_by_rep {
             print_single_tracker(rep, stats, &mut out)?;
+            writeln!(out)?;
         }
 
         // print the red flags
@@ -667,7 +668,7 @@ pub mod output {
     fn percent_or_na(rate: Option<f64>) -> String {
         rate.map(|r| format!("{:6.2}%", r * 100.0)).unwrap_or_else(|| "    N/A".to_owned())
     }
-    fn into_list_of_job_nums(jobs: &[Rc<AnalyzedJob>]) -> String {
+    fn into_list_of_job_nums(jobs: &[Arc<AnalyzedJob>]) -> String {
         jobs.iter()
             .map(|job| job.job.job_number.as_deref().unwrap_or_else(|| &job.job.jnid))
             .collect::<Vec<_>>()
