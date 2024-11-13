@@ -16,10 +16,15 @@ pub enum KpiSubject {
 }
 impl Display for KpiSubject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+impl KpiSubject {
+    pub fn as_str(&self) -> &str {
         match self {
-            KpiSubject::Global => write!(f, "[Global]"),
-            KpiSubject::SalesRep(name) => write!(f, "{}", name),
-            KpiSubject::UnknownSalesRep => write!(f, "[Unknown]"),
+            KpiSubject::Global => "[Global]",
+            KpiSubject::SalesRep(name) => &name,
+            KpiSubject::UnknownSalesRep => "[Unknown]",
         }
     }
 }
@@ -655,14 +660,14 @@ pub mod output {
         Ok(())
     }
 
-    fn into_days(time: TimeDelta) -> f64 {
+    pub fn into_days(time: TimeDelta) -> f64 {
         const SECONDS_PER_DAY: f64 = 86400.0;
         time.num_seconds() as f64 / SECONDS_PER_DAY
     }
-    fn percent_or_na(rate: Option<f64>) -> String {
+    pub fn percent_or_na(rate: Option<f64>) -> String {
         rate.map(|r| format!("{:6.2}%", r * 100.0)).unwrap_or_else(|| "    N/A".to_owned())
     }
-    fn into_list_of_job_nums(jobs: &[Arc<AnalyzedJob>]) -> String {
+    pub fn into_list_of_job_nums(jobs: &[Arc<AnalyzedJob>]) -> String {
         jobs.iter()
             .map(|job| job.job.job_number.as_deref().unwrap_or_else(|| &job.job.jnid))
             .collect::<Vec<_>>()

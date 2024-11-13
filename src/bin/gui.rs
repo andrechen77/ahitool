@@ -1,6 +1,6 @@
 use ahitool::{
     apis::job_nimbus,
-    tools::{self, kpi::KpiData},
+    tools::{self, kpi::{JobTrackerStats, KpiData, KpiSubject}},
 };
 use chrono::{DateTime, Utc};
 use eframe::egui;
@@ -90,7 +90,7 @@ impl eframe::App for AhitoolApp {
             // display the current tool
             match self.current_tool {
                 AhitoolTool::None => {}
-                AhitoolTool::Kpi => kpi_page(ui, &mut self.kpi_page_state),
+                AhitoolTool::Kpi => render_kpi_page(ui, &mut self.kpi_page_state),
                 AhitoolTool::Ar => {}
             }
         });
@@ -103,6 +103,7 @@ struct KpiPage {
     loading_kpi_result: bool,
     kpi_result_tx: watch::Sender<Option<KpiResult>>,
     kpi_result_rx: watch::Receiver<Option<KpiResult>>,
+    selected_rep: Option<KpiSubject>,
 }
 
 impl Default for KpiPage {
@@ -114,15 +115,14 @@ impl Default for KpiPage {
             loading_kpi_result: false,
             kpi_result_tx: tx,
             kpi_result_rx: rx,
+            selected_rep: None,
         }
     }
 }
 
 struct KpiResult {
     last_fetched: DateTime<Utc>,
-    #[allow(dead_code)]
     data: KpiData,
-    report: String,
 }
 
 async fn fetch_kpi_result(jn_api_key: String, answerer: watch::Sender<Option<KpiResult>>) {
@@ -130,18 +130,7 @@ async fn fetch_kpi_result(jn_api_key: String, answerer: watch::Sender<Option<Kpi
         Ok(jobs) => {
             let last_fetched = Utc::now();
             let kpi_result = tools::kpi::calculate_kpi(jobs, (None, None));
-            let mut output = Vec::new();
-            let mut report = String::new();
-            match tools::kpi::output::human::print_entire_report_to_writer(&kpi_result, &mut output)
-            {
-                Ok(_) => {
-                    report = String::from_utf8(output).expect("output should be valid UTF-8");
-                }
-                Err(e) => {
-                    warn!("error formatting KPI report: {}", e);
-                }
-            }
-            Some(KpiResult { last_fetched, data: kpi_result, report })
+            Some(KpiResult { last_fetched, data: kpi_result })
         }
         Err(e) => {
             warn!("error fetching jobs: {}", e);
@@ -153,13 +142,14 @@ async fn fetch_kpi_result(jn_api_key: String, answerer: watch::Sender<Option<Kpi
     }
 }
 
-fn kpi_page(ui: &mut egui::Ui, state: &mut KpiPage) {
+fn render_kpi_page(ui: &mut egui::Ui, state: &mut KpiPage) {
     ui.horizontal(|ui| {
-        ui.checkbox(&mut state.show_api_key, "Show API Key");
+        ui.label("JobNimbus API Key:");
+        ui.checkbox(&mut state.show_api_key, "show");
         if state.show_api_key {
             ui.text_edit_singleline(&mut state.jn_api_key);
         } else {
-            ui.label("********");
+            ui.text_edit_singleline(&mut "************");
         }
     });
 
@@ -186,7 +176,69 @@ fn kpi_page(ui: &mut egui::Ui, state: &mut KpiPage) {
         ));
     });
     ui.separator();
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        ui.label(kpi_result.as_ref().map(|d| d.report.as_str()).unwrap_or("No data"));
+    if let Some(kpi_result) = kpi_result.as_ref() {
+        // display and allow user to choose current tracker
+        let heading = ui.label(state.selected_rep.as_ref().map_or("no rep selected", |rep| rep.as_str()));
+        let popup_id = ui.make_persistent_id("rep_chooser");
+        if heading.clicked() {
+            ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+        }
+        egui::popup_above_or_below_widget(
+            ui,
+            popup_id,
+            &heading,
+            egui::AboveOrBelow::Below,
+            egui::PopupCloseBehavior::CloseOnClick,
+            |ui| {
+                ui.set_min_width(200.0);
+                ui.label("Select a tool:");
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for (rep, _) in &kpi_result.data.stats_by_rep {
+                        if ui.button(rep.as_str()).clicked() {
+                            state.selected_rep = Some(rep.clone());
+                        }
+                    }
+                });
+            },
+        );
+
+        if let Some(selected_rep) = state.selected_rep.as_ref() {
+            if let Some(stats) = kpi_result.data.stats_by_rep.get(selected_rep) {
+                render_kpi_stats_table(ui, stats);
+            } else {
+                ui.label("No stats available for selected rep");
+            }
+        }
+    }
+}
+
+fn render_kpi_stats_table(ui: &mut egui::Ui, stats: &JobTrackerStats) {
+    egui::Frame::none().stroke(egui::Stroke::new(1.0, egui::Color32::WHITE)).show(ui, |ui| {
+        egui::Grid::new("stats table")
+            .num_columns(4)
+            .show(ui, |ui| {
+                ui.label("Conversion");
+                ui.label("Rate");
+                ui.label("Total");
+                ui.label("Average Time (days)");
+                ui.end_row();
+
+                for (name, conv_stats) in [
+                    ("All Losses", &stats.loss_conv),
+                    ("(I) Appt to Contingency", &stats.appt_continge_conv),
+                    ("(I) Appt to Contract", &stats.appt_contract_insure_conv),
+                    ("(I) Contingency to Contract", &stats.continge_contract_conv),
+                    ("(R) Appt to Contract", &stats.appt_contract_retail_conv),
+                    ("(I) Contract to Installation", &stats.install_insure_conv),
+                    ("(R) Contract to Installation", &stats.install_retail_conv),
+                ] {
+                    use tools::kpi::output;
+                    ui.label(name);
+                    ui.label(&output::percent_or_na(conv_stats.conversion_rate));
+                    ui.label(&conv_stats.achieved.len().to_string());
+                    ui.label(format!("{:.2}", output::into_days(conv_stats.average_time_to_achieve)));
+                    ui.end_row();
+                }
+            });
     });
 }
