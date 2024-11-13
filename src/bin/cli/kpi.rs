@@ -1,11 +1,10 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use ahitool::{
     apis::{
         google_sheets::{self, SheetNickname},
         job_nimbus,
-    },
-    tools,
+    }, jobs::Job, tools
 };
 use anyhow::bail;
 use chrono::{Datelike as _, NaiveDate, NaiveDateTime, NaiveTime, TimeZone as _, Utc};
@@ -201,8 +200,7 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
 
     // do the processing
     let client = reqwest::Client::new();
-    let jobs =
-        job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, filter.as_deref()).await?;
+    let jobs: Vec<Arc<Job>> = job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, filter.as_deref()).await?.map(|job| Arc::new(job)).collect();
     let kpi_result =
         tokio::task::spawn_blocking(move || tools::kpi::calculate_kpi(jobs, (from_date, to_date)))
             .await?;

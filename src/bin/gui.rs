@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ahitool::{
     apis::job_nimbus,
     tools::{self, kpi::{JobTrackerStats, KpiData, KpiSubject}},
@@ -129,7 +131,7 @@ async fn fetch_kpi_result(jn_api_key: String, answerer: watch::Sender<Option<Kpi
     let answer = match job_nimbus::get_all_jobs_from_job_nimbus(resource::client(), &jn_api_key, None).await {
         Ok(jobs) => {
             let last_fetched = Utc::now();
-            let kpi_result = tools::kpi::calculate_kpi(jobs, (None, None));
+            let kpi_result = tools::kpi::calculate_kpi(jobs.map(|job| Arc::new(job)), (None, None));
             Some(KpiResult { last_fetched, data: kpi_result })
         }
         Err(e) => {

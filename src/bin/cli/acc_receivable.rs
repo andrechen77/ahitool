@@ -2,8 +2,7 @@ use ahitool::{
     apis::{
         google_sheets::{self, SheetNickname},
         job_nimbus,
-    },
-    tools,
+    }, jobs::Job, tools
 };
 use clap::CommandFactory as _;
 use tracing::{info, warn};
@@ -118,7 +117,7 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
     }
 
     let client = reqwest::Client::new();
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, None).await?;
+    let jobs: Vec<Job> = job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, None).await?.collect();
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs.iter());
 

@@ -61,7 +61,7 @@ pub async fn get_all_jobs_from_job_nimbus(
     client: reqwest::Client,
     api_key: &str,
     filter: Option<&str>,
-) -> anyhow::Result<Vec<Job>> {
+) -> anyhow::Result<impl Iterator<Item = Job>> {
     use serde_json::Value;
     #[derive(Deserialize)]
     struct ApiResponse {
@@ -84,6 +84,7 @@ pub async fn get_all_jobs_from_job_nimbus(
     info!("recieved {} jobs from JobNimbus", response.count);
     assert_eq!(response.count as usize, count);
 
-    let results: Result<Vec<_>, _> = response.results.into_iter().map(Job::try_from).collect();
-    Ok(results?)
+    Ok(response.results.into_iter().filter_map(|v| {
+        Job::try_from(v).inspect_err(|err| warn!("error deserializing job: {}", err)).ok()
+    }))
 }

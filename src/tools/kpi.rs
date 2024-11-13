@@ -37,7 +37,7 @@ pub struct KpiData {
 }
 
 pub fn calculate_kpi<'a>(
-    jobs: impl IntoIterator<Item = Job>,
+    jobs: impl IntoIterator<Item = Arc<Job>>,
     (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
 ) -> KpiData {
     let (trackers_by_rep, red_flags_by_rep) =
@@ -70,7 +70,7 @@ mod processing {
     );
 
     pub fn process_jobs(
-        jobs: impl Iterator<Item = Job>,
+        jobs: impl Iterator<Item = Arc<Job>>,
         (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
     ) -> TrackersAndFlags {
         info!(

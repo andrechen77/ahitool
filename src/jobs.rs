@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use std::{fmt::Display, ops::Index};
+use std::{fmt::Display, ops::Index, sync::Arc};
 use thiserror::Error;
 
 const KEY_JNID: &str = "jnid";
@@ -197,7 +197,7 @@ pub struct JobAnalysis {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct AnalyzedJob {
-    pub job: Job,
+    pub job: Arc<Job>,
     /// `None` if the job has errors that prevented analysis.
     pub analysis: Option<JobAnalysis>,
 }
@@ -234,7 +234,7 @@ pub enum JobAnalysisError {
     InvalidLoss,
 }
 
-pub fn analyze_job(job: Job) -> (AnalyzedJob, Vec<JobAnalysisError>) {
+pub fn analyze_job(job: Arc<Job>) -> (AnalyzedJob, Vec<JobAnalysisError>) {
     let mut errors = Vec::new();
 
     'analysis: {
@@ -452,8 +452,8 @@ mod test {
         date_3: Option<Timestamp>,
         date_4: Option<Timestamp>,
         date_5: Option<Timestamp>,
-    ) -> Job {
-        Job {
+    ) -> Arc<Job> {
+        Arc::new(Job {
             jnid: "0".to_owned(),
             sales_rep: None,
             status: Status::JobsInProgress, // arbitrary choice that shouldn't matter for tests
@@ -471,7 +471,7 @@ mod test {
                 loss_date: date_5,
             },
             amt_receivable: 0,
-        }
+        })
     }
 
     #[test]
@@ -670,7 +670,7 @@ mod test {
 
     #[test]
     fn job_analysis_inconsistent_insurance_info() {
-        let job = Job {
+        let job = Arc::new(Job {
             jnid: "0".to_owned(),
             sales_rep: None,
             status: Status::JobsInProgress, // arbitrary; shouldn't affect tests
@@ -688,7 +688,7 @@ mod test {
                 loss_date: None,
             },
             amt_receivable: 0,
-        };
+        });
         assert_eq!(
             analyze_job(job.clone()),
             (
