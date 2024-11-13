@@ -196,7 +196,7 @@ pub fn main(args: Args) -> anyhow::Result<()> {
 
     // do the processing
     let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, filter.as_deref())?;
-    let kpi_result = tools::kpi::calculate_kpi(jobs, (from_date, to_date))?;
+    let kpi_result = tools::kpi::calculate_kpi(jobs, (from_date, to_date));
 
     // output the results
     use tools::kpi::output;

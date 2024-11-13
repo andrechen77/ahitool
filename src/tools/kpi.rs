@@ -34,14 +34,15 @@ pub struct KpiResult {
 pub fn calculate_kpi<'a>(
     jobs: impl IntoIterator<Item = Job>,
     (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
-) -> anyhow::Result<KpiResult> {
-    let (trackers_by_rep, red_flags_by_rep) = processing::process_jobs(jobs.into_iter(), (from_dt, to_dt));
+) -> KpiResult {
+    let (trackers_by_rep, red_flags_by_rep) =
+        processing::process_jobs(jobs.into_iter(), (from_dt, to_dt));
     let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
         .into_iter()
         .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
         .filter(|(_, stats)| stats.appt_count > 0)
         .collect();
-    Ok(KpiResult { stats_by_rep, red_flags_by_rep })
+    KpiResult { stats_by_rep, red_flags_by_rep }
 }
 
 mod processing {
