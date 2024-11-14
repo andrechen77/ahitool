@@ -23,10 +23,14 @@ pub async fn get_api_key(new_api_key: Option<String>) -> Result<String, GetApiKe
     if let Some(new_api_key) = new_api_key {
         if let Err(err) = tokio::fs::write(cache_file, &new_api_key).await {
             warn!("failed to cache new API key in file: {}", err);
+        } else {
+            info!("cached new API key in file");
         }
         Ok(new_api_key)
     } else if cache_file.exists() {
-        Ok(tokio::fs::read_to_string(cache_file).await?)
+        let api_key = tokio::fs::read_to_string(cache_file).await?;
+        info!("loaded API key from cache file");
+        Ok(api_key)
     } else {
         Err(GetApiKeyError::MissingApiKey)
     }

@@ -12,6 +12,7 @@ pub struct DataLoader<T> {
 }
 
 impl<T> DataLoader<T> {
+    #[allow(dead_code)]
     pub fn new(init: T) -> Self {
         Self {
             data: Mutex::new(init),

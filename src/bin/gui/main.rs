@@ -1,4 +1,5 @@
 
+use ahitool::apis::job_nimbus;
 use eframe::egui;
 use job_nimbus_client::JobNimbusClient;
 use tracing::warn;
@@ -29,14 +30,15 @@ fn main() {
     // set up tracing
     tracing_subscriber::fmt::init();
 
-    // make sure the runtime is initialized
-    resource::runtime();
+    let app_state = resource::runtime().block_on(async move {
+        AppState::with_cached_storage().await
+    });
 
     // run the UI on the main thread
     let result = eframe::run_native(
         "AHItool",
         Default::default(),
-        Box::new(|_cc| Ok(Box::new(AhitoolApp::default()))),
+        Box::new(|_cc| Ok(Box::new(app_state))),
     );
     if let Err(e) = result {
         warn!("error in UI thread: {}", e);
@@ -44,7 +46,7 @@ fn main() {
 }
 
 #[derive(Default)]
-struct AhitoolApp {
+struct AppState {
     current_tool: AhitoolTool,
     job_nimbus_client: JobNimbusClient,
     kpi_page_state: kpi_page::KpiPage,
@@ -58,7 +60,7 @@ enum AhitoolTool {
     Ar,
 }
 
-impl eframe::App for AhitoolApp {
+impl eframe::App for AppState {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             // heading to display and choose the current tool
@@ -95,5 +97,29 @@ impl eframe::App for AhitoolApp {
                 AhitoolTool::Ar => {}
             }
         });
+    }
+}
+
+impl AppState {
+    async fn with_cached_storage() -> Self {
+        let jn_api_key = job_nimbus::get_api_key(std::env::var("JN_API_KEY").ok()).await.unwrap_or_else(|e| {
+            match e {
+                job_nimbus::GetApiKeyError::MissingApiKey => {
+                    warn!("No JobNimbus API key provided and no cache file found; using empty string");
+                    String::new()
+                }
+                job_nimbus::GetApiKeyError::IoError(e) => {
+                    warn!("Error reading cache file; using empty string: {}", e);
+                    String::new()
+                }
+            }
+        });
+        Self {
+            job_nimbus_client: JobNimbusClient {
+                api_key: jn_api_key,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
     }
 }
