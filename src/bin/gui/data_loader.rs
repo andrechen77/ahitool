@@ -43,10 +43,21 @@ impl<T> DataLoader<T> {
     }
 
     pub fn fetch_in_progress(&self) -> bool {
-        let current = self.rx.take();
-        let fetch_in_progress = current.is_some();
-        self.rx.set(current);
-        fetch_in_progress
+        if let Some(mut rx) = self.rx.take() {
+            match rx.try_recv() {
+                Ok(new_data) => {
+                    *self.data.lock().unwrap() = new_data;
+                    false
+                }
+                Err(TryRecvError::Empty) => {
+                    self.rx.set(Some(rx));
+                    true
+                }
+                Err(TryRecvError::Closed) => false,
+            }
+        } else {
+            false
+        }
     }
 
     /// Marks the `DataLoader` as having a fetch in progress, returning the

@@ -35,20 +35,24 @@ impl JobNimbusClient {
         });
 
         ui.horizontal(|ui| {
-            if self.data.fetch_in_progress() {
+            let fetch_in_progress = self.data.fetch_in_progress();
+            let button = ui.add_enabled(!fetch_in_progress, egui::Button::new("Fetch jobs"));
+            if fetch_in_progress {
                 ui.label("Fetching...");
-            } else if ui.button("Fetch Jobs").clicked() {
+            } else {
+                ui.label(format!(
+                    "Last fetched: {}",
+                    self.data
+                        .get_mut()
+                        .as_ref()
+                        .map(|d| d.fetched.time().to_string())
+                        .as_deref()
+                        .unwrap_or("never")
+                ));
+            }
+            if button.clicked() {
                 resource::runtime().spawn(self.fetch());
             }
-            ui.label(format!(
-                "Last fetched: {}",
-                self.data
-                    .get_mut()
-                    .as_ref()
-                    .map(|d| d.fetched.time().to_string())
-                    .as_deref()
-                    .unwrap_or("never")
-            ));
         });
         if let Some(data) = self.data.get_mut().as_ref() {
             ui.label(format!("{} jobs in memory", data.jobs.len()));
