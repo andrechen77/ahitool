@@ -40,7 +40,8 @@ impl JobNimbusClient {
             }
             ui.label(format!(
                 "Last fetched: {}",
-                self.data.get_mut()
+                self.data
+                    .get_mut()
                     .as_ref()
                     .map(|d| d.fetched.time().to_string())
                     .as_deref()
@@ -60,21 +61,23 @@ impl JobNimbusClient {
 
         async move {
             trace!("a");
-            let answer = match job_nimbus::get_all_jobs_from_job_nimbus(resource::client(), &api_key, None).await {
-                Ok(jobs) => {
-                    let now = Utc::now();
-                    trace!("b");
-                    let jobs = jobs.map(|job| Arc::new(job)).collect();
-                    Some(Arc::new(JobNimbusData { fetched: now, jobs }))
-                }
-                Err(e) => {
-                    warn!("error fetching jobs: {}", e);
-                    None
-                }
-            };
+            let answer =
+                match job_nimbus::get_all_jobs_from_job_nimbus(resource::client(), &api_key, None)
+                    .await
+                {
+                    Ok(jobs) => {
+                        let now = Utc::now();
+                        trace!("b");
+                        let jobs = jobs.map(|job| Arc::new(job)).collect();
+                        Some(Arc::new(JobNimbusData { fetched: now, jobs }))
+                    }
+                    Err(e) => {
+                        warn!("error fetching jobs: {}", e);
+                        None
+                    }
+                };
             trace!("data retrieved; sending back to client");
             let _ = data_tx.send(answer);
         }
-
     }
 }

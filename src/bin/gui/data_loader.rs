@@ -1,4 +1,7 @@
-use std::{cell::Cell, sync::{Mutex, MutexGuard}};
+use std::{
+    cell::Cell,
+    sync::{Mutex, MutexGuard},
+};
 
 use tokio::sync::oneshot::{self, error::TryRecvError};
 
@@ -14,10 +17,7 @@ pub struct DataLoader<T> {
 impl<T> DataLoader<T> {
     #[allow(dead_code)]
     pub fn new(init: T) -> Self {
-        Self {
-            data: Mutex::new(init),
-            rx: Cell::new(None),
-        }
+        Self { data: Mutex::new(init), rx: Cell::new(None) }
     }
 
     pub fn get_mut(&self) -> MutexGuard<'_, T> {
@@ -26,7 +26,7 @@ impl<T> DataLoader<T> {
                 Ok(new_data) => {
                     let mut guard = self.data.lock().unwrap();
                     *guard = new_data;
-                    return guard
+                    return guard;
                 }
                 Err(TryRecvError::Empty) => {
                     // put the receiver back since it might still produce a
@@ -36,7 +36,7 @@ impl<T> DataLoader<T> {
                 Err(TryRecvError::Closed) => {
                     // do not put the receive back since there is no chance it
                     // will produce a value
-                },
+                }
             }
         }
         self.data.lock().unwrap()

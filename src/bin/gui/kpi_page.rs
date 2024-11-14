@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use ahitool::tools::{self, kpi::{JobTrackerStats, KpiData, KpiSubject}};
+use ahitool::tools::{
+    self,
+    kpi::{JobTrackerStats, KpiData, KpiSubject},
+};
 use tracing::warn;
 
 use crate::{data_loader::DataLoader, job_nimbus_client::JobNimbusClient, resource};
@@ -21,7 +24,8 @@ impl KpiPage {
                     let jn_data = Arc::clone(jn_data);
                     let kpi_data_tx = self.kpi_data.start_fetch();
                     resource::runtime().spawn(async move {
-                        let kpi_data = tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), (None, None));
+                        let kpi_data =
+                            tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), (None, None));
                         let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
                     });
                 }
@@ -44,10 +48,14 @@ impl KpiPage {
                     ui.text_edit_singleline(&mut self.spreadsheet_id);
                 });
                 if ui.button("Export").clicked() {
-                    let spreadsheet_id = Some(self.spreadsheet_id.clone()).filter(|s| !s.is_empty());
+                    let spreadsheet_id =
+                        Some(self.spreadsheet_id.clone()).filter(|s| !s.is_empty());
                     let kpi_data = Arc::clone(kpi_data);
                     resource::runtime().spawn_blocking(move || {
-                        if let Err(err) = tools::kpi::output::generate_report_google_sheets(&kpi_data, spreadsheet_id.as_deref()) {
+                        if let Err(err) = tools::kpi::output::generate_report_google_sheets(
+                            &kpi_data,
+                            spreadsheet_id.as_deref(),
+                        ) {
                             warn!("Error exporting to Google Sheets: {}", err);
                         }
                     });
@@ -57,9 +65,14 @@ impl KpiPage {
     }
 }
 
-fn render_stats_viewer(ui: &mut egui::Ui, selected_rep: &mut Option<KpiSubject>, kpi_data: &KpiData) {
+fn render_stats_viewer(
+    ui: &mut egui::Ui,
+    selected_rep: &mut Option<KpiSubject>,
+    kpi_data: &KpiData,
+) {
     // display and allow user to choose current tracker
-    let heading = ui.label(selected_rep.as_ref().map_or("No rep selected (click me)", |rep| rep.as_str()));
+    let heading =
+        ui.label(selected_rep.as_ref().map_or("No rep selected (click me)", |rep| rep.as_str()));
     let popup_id = ui.make_persistent_id("rep_chooser");
     if heading.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
@@ -95,31 +108,29 @@ fn render_stats_viewer(ui: &mut egui::Ui, selected_rep: &mut Option<KpiSubject>,
 
 fn render_kpi_stats_table(ui: &mut egui::Ui, stats: &JobTrackerStats) {
     egui::Frame::none().stroke(egui::Stroke::new(1.0, egui::Color32::WHITE)).show(ui, |ui| {
-        egui::Grid::new("stats table")
-            .num_columns(4)
-            .show(ui, |ui| {
-                ui.label("Conversion");
-                ui.label("Rate");
-                ui.label("Total");
-                ui.label("Average Time (days)");
-                ui.end_row();
+        egui::Grid::new("stats table").num_columns(4).show(ui, |ui| {
+            ui.label("Conversion");
+            ui.label("Rate");
+            ui.label("Total");
+            ui.label("Average Time (days)");
+            ui.end_row();
 
-                for (name, conv_stats) in [
-                    ("All Losses", &stats.loss_conv),
-                    ("(I) Appt to Contingency", &stats.appt_continge_conv),
-                    ("(I) Appt to Contract", &stats.appt_contract_insure_conv),
-                    ("(I) Contingency to Contract", &stats.continge_contract_conv),
-                    ("(R) Appt to Contract", &stats.appt_contract_retail_conv),
-                    ("(I) Contract to Installation", &stats.install_insure_conv),
-                    ("(R) Contract to Installation", &stats.install_retail_conv),
-                ] {
-                    use tools::kpi::output;
-                    ui.label(name);
-                    ui.label(&output::percent_or_na(conv_stats.conversion_rate));
-                    ui.label(&conv_stats.achieved.len().to_string());
-                    ui.label(format!("{:.2}", output::into_days(conv_stats.average_time_to_achieve)));
-                    ui.end_row();
-                }
-            });
+            for (name, conv_stats) in [
+                ("All Losses", &stats.loss_conv),
+                ("(I) Appt to Contingency", &stats.appt_continge_conv),
+                ("(I) Appt to Contract", &stats.appt_contract_insure_conv),
+                ("(I) Contingency to Contract", &stats.continge_contract_conv),
+                ("(R) Appt to Contract", &stats.appt_contract_retail_conv),
+                ("(I) Contract to Installation", &stats.install_insure_conv),
+                ("(R) Contract to Installation", &stats.install_retail_conv),
+            ] {
+                use tools::kpi::output;
+                ui.label(name);
+                ui.label(&output::percent_or_na(conv_stats.conversion_rate));
+                ui.label(&conv_stats.achieved.len().to_string());
+                ui.label(format!("{:.2}", output::into_days(conv_stats.average_time_to_achieve)));
+                ui.end_row();
+            }
+        });
     });
 }
