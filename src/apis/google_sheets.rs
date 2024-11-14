@@ -25,6 +25,7 @@ use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
+use std::fmt;
 
 const ENDPOINT_SPREADSHEETS: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 const KNOWN_SHEETS_FILE: &str = "google_sheets.json";
@@ -315,6 +316,8 @@ pub async fn update_known_sheets_file(
     serde_json::to_writer(&mut buffer, &known_sheets)?;
     tokio::fs::write(path, &buffer).await?;
 
+    info!("Updated known sheets file with new sheet ID for {}", nickname);
+
     Ok(())
 }
 
@@ -331,6 +334,7 @@ pub async fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<
         }
     };
     let mut known_sheets: KnownSheets = serde_json::from_reader(Cursor::new(file_contents))?;
+    info!("Read ID of existing Google Sheet for {}", nickname);
     Ok(known_sheets.remove(&nickname).map(Cow::into_owned))
 }
 
@@ -338,4 +342,14 @@ pub async fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<
 pub enum SheetNickname {
     AccReceivable,
     Kpi,
+}
+
+impl fmt::Display for SheetNickname {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let nickname_str = match self {
+            SheetNickname::AccReceivable => "AccReceivable",
+            SheetNickname::Kpi => "Kpi",
+        };
+        write!(f, "{}", nickname_str)
+    }
 }
