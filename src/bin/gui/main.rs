@@ -1,5 +1,5 @@
 
-use ahitool::apis::job_nimbus;
+use ahitool::apis::{google_sheets::{self, SheetNickname}, job_nimbus};
 use eframe::egui;
 use job_nimbus_client::JobNimbusClient;
 use tracing::warn;
@@ -114,9 +114,26 @@ impl AppState {
                 }
             }
         });
+
+        let kpi_spreadsheet_id = match google_sheets::read_known_sheets_file(SheetNickname::Kpi).await {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                warn!("No KPI spreadsheet ID found in known sheets file; using empty string");
+                String::new()
+            }
+            Err(e) => {
+                warn!("Error reading known sheets file; using empty string: {}", e);
+                String::new()
+            }
+        };
+
         Self {
             job_nimbus_client: JobNimbusClient {
                 api_key: jn_api_key,
+                ..Default::default()
+            },
+            kpi_page_state: kpi_page::KpiPage {
+                spreadsheet_id: kpi_spreadsheet_id,
                 ..Default::default()
             },
             ..Default::default()

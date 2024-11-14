@@ -535,7 +535,7 @@ pub mod output {
     }
 
     pub fn generate_report_google_sheets(
-        kpi_result: &KpiData,
+        kpi_data: &KpiData,
         spreadsheet_id: Option<&str>,
     ) -> anyhow::Result<()> {
         fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
@@ -547,7 +547,7 @@ pub mod output {
             }
         }
 
-        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_result;
+        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_data;
 
         // create a stats sheet for each rep
         let mut sheets: Vec<_> = stats_by_rep
