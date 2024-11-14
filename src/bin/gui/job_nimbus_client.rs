@@ -32,12 +32,11 @@ impl JobNimbusClient {
             }
         });
 
-        let mut refetch = false;
         ui.horizontal(|ui| {
             if self.data.fetch_in_progress() {
                 ui.label("Fetching...");
             } else if ui.button("Fetch Jobs").clicked() {
-                refetch = true;
+                resource::runtime().spawn(self.fetch());
             }
             ui.label(format!(
                 "Last fetched: {}",
@@ -50,10 +49,6 @@ impl JobNimbusClient {
         });
         if let Some(data) = self.data.get_mut().as_ref() {
             ui.label(format!("{} jobs in memory", data.jobs.len()));
-        }
-
-        if refetch {
-            resource::runtime().spawn(self.fetch());
         }
     }
 
