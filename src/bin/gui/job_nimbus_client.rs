@@ -22,6 +22,8 @@ pub struct JobNimbusClient {
 
 impl JobNimbusClient {
     pub fn render(&mut self, ui: &mut egui::Ui) {
+        ui.heading("JobNimbus");
+
         ui.horizontal(|ui| {
             ui.label("JobNimbus API Key:");
             ui.checkbox(&mut self.show_api_key, "show");

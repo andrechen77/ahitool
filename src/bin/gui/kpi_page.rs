@@ -13,12 +13,14 @@ pub struct KpiPage {
     pub kpi_data: DataLoader<Option<Arc<KpiData>>>,
     pub selected_rep: Option<KpiSubject>,
     pub spreadsheet_id: String,
+    pub export_data: DataLoader<()>,
 }
 
 impl KpiPage {
     pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| jn_client.render(ui));
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
+            ui.heading("Key Performance Indicators");
             if let Some(jn_data) = jn_client.data.get_mut().as_ref() {
                 if ui.button("Calculate KPIs").clicked() {
                     let jn_data = Arc::clone(jn_data);
@@ -40,28 +42,36 @@ impl KpiPage {
                 return;
             }
         });
-        if let Some(kpi_data) = self.kpi_data.get_mut().as_ref() {
-            egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
-                ui.heading("Export to Google Sheets");
-                ui.horizontal(|ui| {
-                    ui.label("Spreadsheet ID (empty to create):");
-                    ui.text_edit_singleline(&mut self.spreadsheet_id);
-                });
-                if ui.button("Export").clicked() {
+        let kpi_data = self.kpi_data.get_mut();
+        egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
+            ui.heading("Export to Google Sheets");
+            ui.horizontal(|ui| {
+                ui.label("Spreadsheet ID (empty to create):");
+                ui.text_edit_singleline(&mut self.spreadsheet_id);
+            });
+            ui.horizontal(|ui| {
+                let button = ui.add_enabled(kpi_data.is_some(), egui::Button::new("Export"));
+                if self.export_data.fetch_in_progress() {
+                    ui.label("Exporting...");
+                }
+                if button.clicked() {
                     let spreadsheet_id =
                         Some(self.spreadsheet_id.clone()).filter(|s| !s.is_empty());
-                    let kpi_data = Arc::clone(kpi_data);
-                    resource::runtime().spawn_blocking(move || {
-                        if let Err(err) = tools::kpi::output::generate_report_google_sheets(
-                            &kpi_data,
-                            spreadsheet_id.as_deref(),
-                        ) {
-                            warn!("Error exporting to Google Sheets: {}", err);
-                        }
-                    });
+                    if let Some(kpi_data) = kpi_data.as_ref().cloned() {
+                        let export_complete_tx = self.export_data.start_fetch();
+                        resource::runtime().spawn_blocking(move || {
+                            if let Err(err) = tools::kpi::output::generate_report_google_sheets(
+                                &kpi_data,
+                                spreadsheet_id.as_deref(),
+                            ) {
+                                warn!("Error exporting to Google Sheets: {}", err);
+                            }
+                            let _ = export_complete_tx.send(());
+                        });
+                    }
                 }
             });
-        }
+        });
     }
 }
 
