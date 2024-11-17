@@ -6,6 +6,7 @@ use eframe::egui;
 use job_nimbus_client::JobNimbusClient;
 use tracing::warn;
 
+mod ar_page;
 mod data_loader;
 mod job_nimbus_client;
 mod kpi_page;
@@ -48,6 +49,7 @@ struct AppState {
     current_tool: AhitoolTool,
     job_nimbus_client: JobNimbusClient,
     kpi_page_state: kpi_page::KpiPage,
+    ar_page_state: ar_page::ArPage,
 }
 
 #[derive(Default, PartialEq, Eq, Hash)]
@@ -92,7 +94,7 @@ impl eframe::App for AppState {
             match self.current_tool {
                 AhitoolTool::None => {}
                 AhitoolTool::Kpi => self.kpi_page_state.render(ui, &mut self.job_nimbus_client),
-                AhitoolTool::Ar => {}
+                AhitoolTool::Ar => self.ar_page_state.render(ui, &mut self.job_nimbus_client),
             }
         });
     }

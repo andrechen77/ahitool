@@ -21,11 +21,11 @@ use spreadsheet::GridCoordinate;
 use spreadsheet::SheetProperties;
 use spreadsheet::Spreadsheet;
 use std::collections::HashMap;
+use std::fmt;
 use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
-use std::fmt;
 
 const ENDPOINT_SPREADSHEETS: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 const KNOWN_SHEETS_FILE: &str = "google_sheets.json";

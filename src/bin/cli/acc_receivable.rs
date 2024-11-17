@@ -1,9 +1,10 @@
+use std::sync::Arc;
+
 use ahitool::{
     apis::{
         google_sheets::{self, SheetNickname},
         job_nimbus,
     },
-    jobs::Job,
     tools,
 };
 use clap::CommandFactory as _;
@@ -119,10 +120,11 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
     }
 
     let client = reqwest::Client::new();
-    let jobs: Vec<Job> =
-        job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, None).await?.collect();
+    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, None)
+        .await?
+        .map(|j| Arc::new(j));
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-        let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs.iter());
+        let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs);
 
         match output_spec {
             OutputSpec::Human(mut writer) => {

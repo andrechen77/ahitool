@@ -51,7 +51,10 @@ impl KpiPage {
             });
             ui.horizontal(|ui| {
                 let fetch_in_progress = self.export_data.fetch_in_progress();
-                let button = ui.add_enabled(kpi_data.is_some() && !fetch_in_progress, egui::Button::new("Export"));
+                let button = ui.add_enabled(
+                    kpi_data.is_some() && !fetch_in_progress,
+                    egui::Button::new("Export"),
+                );
                 if fetch_in_progress {
                     ui.label("Exporting...");
                 }

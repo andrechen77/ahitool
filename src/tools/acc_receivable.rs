@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::HashMap, io::Write, sync::Arc};
 
 use chrono::Utc;
 
@@ -25,14 +25,12 @@ const CATEGORIES_WE_CARE_ABOUT: &[Status] = &[
     Status::Collections,
 ];
 
-pub struct AccRecvableData<'a> {
-    total: i32,
-    categorized_jobs: HashMap<Status, (i32, Vec<&'a Job>)>,
+pub struct AccRecvableData {
+    pub total: i32,
+    pub categorized_jobs: HashMap<Status, (i32, Vec<Arc<Job>>)>,
 }
 
-pub fn calculate_acc_receivable<'a>(
-    jobs: impl IntoIterator<Item = &'a Job>,
-) -> AccRecvableData<'a> {
+pub fn calculate_acc_receivable(jobs: impl IntoIterator<Item = Arc<Job>>) -> AccRecvableData {
     let mut results = AccRecvableData { total: 0, categorized_jobs: HashMap::new() };
     for category in CATEGORIES_WE_CARE_ABOUT {
         results.categorized_jobs.insert(category.clone(), (0, Vec::new()));
@@ -44,7 +42,7 @@ pub fn calculate_acc_receivable<'a>(
         {
             results.total += amt;
             *category_total += amt;
-            category_jobs.push(&job);
+            category_jobs.push(job);
         }
     }
     results
@@ -134,7 +132,7 @@ pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Resu
 }
 
 pub fn generate_report_google_sheets(
-    results: &AccRecvableData<'_>,
+    results: &AccRecvableData,
     spreadsheet_id: Option<&str>,
 ) -> anyhow::Result<()> {
     fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
