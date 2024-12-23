@@ -1,4 +1,4 @@
-use ahitool::tools::{self, acc_receivable::AccRecvableData};
+use ahitool::{tools::{self, acc_receivable::AccRecvableData}, utils};
 
 use crate::{data_loader::DataLoader, job_nimbus_client::JobNimbusClient, resource};
 
@@ -50,7 +50,13 @@ fn render_api_hierarchy(ui: &mut egui::Ui, ar_data: &AccRecvableData) {
                 ))
                 .default_open(false)
                 .show(ui, |ui| {
-                    ui.label("list of jobs here");
+                    for job in jobs {
+                        let text = format!("{} owes ${:.2}", job.job_number.as_deref().unwrap_or("[no job number]"), job.amt_receivable as f64 / 100.0);
+                        let label = egui::Label::new(text).sense(egui::Sense::click());
+                        if ui.add(label).clicked() {
+                            utils::open_url(&format!("https://app.jobnimbus.com/job/{}", job.jnid));
+                        }
+                    }
                 });
             }
         });
