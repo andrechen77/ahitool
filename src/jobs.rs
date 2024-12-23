@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use tracing::warn;
 use std::{fmt::Display, ops::Index, sync::Arc};
 use thiserror::Error;
 
@@ -212,9 +213,12 @@ impl JobAnalysis {
         if self.timestamps.len() == Milestone::NUM_VARIANTS {
             // `find_map` will only return `None` if all the timestamps were
             // `None`, which would imply that the job was settled since the
-            // beginning of time. in that case panic since something has
-            // probably gone wrong :P
-            return Some(self.timestamps.iter().rev().find_map(|&ts| ts).unwrap());
+            // beginning of time. in that case something has probably gone wrong
+            if let Some(first_timestamp) = self.timestamps.iter().rev().find_map(|&ts| ts) {
+                return Some(first_timestamp);
+            } else {
+                warn!("Attempting to find the settled date of a job with no timestamps: {:?}", self);
+            }
         }
         None
     }
@@ -442,7 +446,7 @@ mod test {
 
     // date-time
     fn dt(seconds: i64) -> Timestamp {
-        Timestamp::from_timestamp(seconds, 0).unwrap()
+        Timestamp::from_timestamp(seconds, 0).expect("should be valid as precondition")
     }
 
     fn make_job(

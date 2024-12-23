@@ -182,7 +182,7 @@ mod processing {
         // calculate stats for each conversion
         let appt_continge_conv = {
             let job_tracker::Bucket { achieved, cum_achieve_time, .. } =
-                tracker.get_bucket(iwc, Milestone::ContingencySigned.into_int()).unwrap();
+                tracker.get_bucket(iwc, Milestone::ContingencySigned.into_int()).expect("hardcoded value should be valid");
             let num_achieved = achieved.len();
             let conversion_rate = if num_insure_appts == 0 {
                 None
@@ -192,13 +192,13 @@ mod processing {
             let average_time_to_achieve = if num_achieved == 0 {
                 TimeDelta::zero()
             } else {
-                *cum_achieve_time / num_achieved.try_into().unwrap()
+                *cum_achieve_time / num_achieved.try_into().expect("number of jobs should not be great enough to overflow")
             };
             ConversionStats { achieved: achieved.clone(), conversion_rate, average_time_to_achieve }
         };
         let appt_contract_insure_conv = {
             let job_tracker::Bucket { achieved, cum_achieve_time, .. } =
-                tracker.get_bucket(iwo, Milestone::ContractSigned.into_int()).unwrap();
+                tracker.get_bucket(iwo, Milestone::ContractSigned.into_int()).expect("hardcoded value should be valid");
             let num_achieved = achieved.len();
             let conversion_rate = if num_insure_appts == 0 {
                 None
@@ -208,7 +208,7 @@ mod processing {
             let average_time_to_achieve = if num_achieved == 0 {
                 TimeDelta::zero()
             } else {
-                *cum_achieve_time / num_achieved.try_into().unwrap()
+                *cum_achieve_time / num_achieved.try_into().expect("number of jobs should not be great enough to overflow")
             };
             ConversionStats { achieved: achieved.clone(), conversion_rate, average_time_to_achieve }
         };

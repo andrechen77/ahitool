@@ -105,8 +105,7 @@ pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Resu
             "Job Status",
             "Amount",
             "Days In Status",
-        ])
-        .unwrap();
+        ])?;
     for (_status, (_category_total, jobs)) in &results.categorized_jobs {
         for job in jobs {
             let name = job.job_name.as_deref().unwrap_or("");
@@ -123,11 +122,10 @@ pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Resu
                     &status,
                     &amount_receivable.to_string(),
                     &days_in_status.to_string(),
-                ])
-                .unwrap();
+                ])?;
         }
     }
-    writer.flush().unwrap();
+    writer.flush()?;
     Ok(())
 }
 

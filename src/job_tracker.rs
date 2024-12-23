@@ -1,4 +1,6 @@
-use std::{fmt::Display, sync::Arc, usize};
+use std::{fmt::{Display, Debug}, sync::Arc, usize};
+
+use tracing::warn;
 
 use crate::jobs::{AnalyzedJob, JobKind, Milestone, TimeDelta, Timestamp};
 
@@ -44,7 +46,7 @@ pub struct JobTracker<const M: usize, const N: usize, J> {
     buckets: [[Option<Bucket<J>>; N]; M],
 }
 
-impl<const M: usize, const N: usize, J: Clone + PartialEq> JobTracker<M, N, J> {
+impl<const M: usize, const N: usize, J: Clone + PartialEq + Debug> JobTracker<M, N, J> {
     pub fn new(mask: [[bool; N]; M]) -> Self {
         let buckets =
             mask.map(|row| row.map(|enabled| if enabled { Some(Bucket::default()) } else { None }));
@@ -101,14 +103,15 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq> JobTracker<M, N, J> {
             };
 
             // add the time it took for the job to be lost to the next milestone
-            self.bucket_after(kind, timestamps.len() - 1)
-                .expect("If a job was lost, it must not have reached all milestones")
-                .cum_loss_time += loss_time;
+            if let Some(bucket) = self.bucket_after(kind, timestamps.len() - 1) {
+                bucket.cum_loss_time += loss_time;
+            } else {
+                warn!("Encountered a job that was lost even after reaching all milestones: {:?}", job);
+            }
         } else {
-            assert!(
-                timestamps.len() == N,
-                "If a job was not lost, it must have reached all milestones"
-            );
+            if timestamps.len() != N {
+                warn!("If a job was not lost, it must have reached all milestones: {:?}", job);
+            }
         }
     }
 
@@ -162,7 +165,7 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq> JobTracker<M, N, J> {
         let average_time_to_achieve = if num_total == 0 {
             TimeDelta::zero()
         } else {
-            total_time_to_achieve / num_total.try_into().unwrap()
+            total_time_to_achieve / num_total.try_into().expect("total number of jobs shouldn't overflow")
         };
 
         CalcStatsResult { achieved: total, conversion_rate, average_time_to_achieve }
@@ -199,7 +202,7 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq> JobTracker<M, N, J> {
         let average_loss_time = if total_lost.len() == 0 {
             TimeDelta::zero()
         } else {
-            total_loss_time / total_lost.len().try_into().unwrap()
+            total_loss_time / total_lost.len().try_into().expect("total number of jobs lost shouldn't be large enough to overflow")
         };
         (total_lost, average_loss_time)
     }
@@ -361,7 +364,7 @@ mod test {
     fn add_jobs() {
         // date-time
         fn dt(seconds: i64) -> Timestamp {
-            Timestamp::from_timestamp(seconds, 0).unwrap()
+            Timestamp::from_timestamp(seconds, 0).expect("precondition should hold")
         }
         // time-delta
         fn td(seconds: i64) -> TimeDelta {

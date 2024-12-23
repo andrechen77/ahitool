@@ -69,7 +69,7 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
         CliOutputFormat::Human | CliOutputFormat::Csv => {
             let writer: Box<dyn std::io::Write + Send> = match output {
                 None | Some("-") => Box::new(std::io::stdout()),
-                Some(_) => Box::new(std::fs::File::create(output.expect("checked was some"))?),
+                Some(output) => Box::new(std::fs::File::create(output)?),
             };
             if format == CliOutputFormat::Human {
                 OutputSpec::Human(writer)

@@ -101,7 +101,7 @@ pub async fn create_spreadsheet(
 
     debug!(
         "Saving the spreadsheet under the nickname {}",
-        serde_json::to_string(&nickname).expect("should work")
+        serde_json::to_string(&nickname).as_ref().map(|s| s.as_str()).unwrap_or("error serializing nickname")
     );
     if let Err(e) = update_known_sheets_file(nickname, &spreadsheet_id).await {
         warn!("Failed to update known sheets file: {}", e);
