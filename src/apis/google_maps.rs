@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use hyper::{header::CONTENT_TYPE, StatusCode};
+use http::{header::CONTENT_TYPE, StatusCode};
 use serde::Deserialize;
 use serde_json::json;
 use thiserror::Error;

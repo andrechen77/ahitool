@@ -1,4 +1,4 @@
-use hyper::header::USER_AGENT;
+use http::header::USER_AGENT;
 use tracing::info;
 
 pub const GITHUB_REPO: &str = "andrechen77/ahitool";

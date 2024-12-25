@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
-use hyper::StatusCode;
+use http::StatusCode;
 use oauth2::basic::BasicTokenResponse;
 use oauth2::{
     basic::BasicClient, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, Scope,

@@ -8,8 +8,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::anyhow;
-use hyper::header::AUTHORIZATION;
-use hyper::StatusCode;
+use http::{header::AUTHORIZATION, StatusCode};
 pub use oauth::run_with_credentials;
 pub use oauth::Token;
 use oauth::TryWithCredentialsError;

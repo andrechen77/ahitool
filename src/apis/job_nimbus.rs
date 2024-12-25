@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use hyper::header::{AUTHORIZATION, CONTENT_TYPE};
+use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use tracing::{info, warn};
 
