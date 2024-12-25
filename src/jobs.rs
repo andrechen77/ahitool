@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use tracing::warn;
 use std::{fmt::Display, ops::Index, sync::Arc};
 use thiserror::Error;
+use tracing::warn;
 
 const KEY_JNID: &str = "jnid";
 const KEY_SALES_REP: &str = "sales_rep_name";
@@ -217,7 +217,10 @@ impl JobAnalysis {
             if let Some(first_timestamp) = self.timestamps.iter().rev().find_map(|&ts| ts) {
                 return Some(first_timestamp);
             } else {
-                warn!("Attempting to find the settled date of a job with no timestamps: {:?}", self);
+                warn!(
+                    "Attempting to find the settled date of a job with no timestamps: {:?}",
+                    self
+                );
             }
         }
         None
@@ -247,17 +250,15 @@ pub fn analyze_job(job: Arc<Job>) -> (AnalyzedJob, Vec<JobAnalysisError>) {
         // contingency was skipped
         let mut kind = if job.insurance_checkbox {
             JobKind::InsuranceWithContingency
-        } else {
-            if job.insurance_claim_number.is_some() {
-                // in the case of existing insurance info but unchecked box, log the
-                // inconsistency and proceed as if it was an insurance job
+        } else if job.insurance_claim_number.is_some() {
+            // in the case of existing insurance info but unchecked box, log the
+            // inconsistency and proceed as if it was an insurance job
 
-                // TODO we might consider this an error in the future
-                // errors.push(JobAnalysisError::InconsistentInsuranceInfo);
-                JobKind::InsuranceWithContingency
-            } else {
-                JobKind::Retail
-            }
+            // TODO we might consider this an error in the future
+            // errors.push(JobAnalysisError::InconsistentInsuranceInfo);
+            JobKind::InsuranceWithContingency
+        } else {
+            JobKind::Retail
         };
 
         // ensure that the milestone dates make chronological sense

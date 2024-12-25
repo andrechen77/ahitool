@@ -8,6 +8,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::anyhow;
+use hyper::header::AUTHORIZATION;
 use hyper::StatusCode;
 pub use oauth::run_with_credentials;
 pub use oauth::Token;
@@ -34,12 +35,12 @@ const KNOWN_SHEETS_FILE: &str = "google_sheets.json";
 /// specified key. Updates that spreadsheet with the specified data, or creates
 /// a new spreadsheet in the user's Google Drive if it doesn't exist. Returns
 /// the URL of the Google Sheet.
-pub async fn create_or_write_spreadsheet(
+pub fn create_or_write_spreadsheet(
     creds: &Token,
     nickname: SheetNickname,
     spreadsheet: Spreadsheet,
 ) -> Result<String, TryWithCredentialsError> {
-    let known_sheet = match read_known_sheets_file(nickname).await {
+    let known_sheet = match read_known_sheets_file(nickname) {
         Err(e) => {
             warn!("Failed to read known sheets file: {}", e);
             None
@@ -49,45 +50,40 @@ pub async fn create_or_write_spreadsheet(
     };
     if let Some(spreadsheet_id) = known_sheet {
         info!("Found existing sheet with ID {}", spreadsheet_id);
-        Ok(update_spreadsheet(creds, &spreadsheet_id, spreadsheet).await?)
+        Ok(update_spreadsheet(creds, &spreadsheet_id, spreadsheet)?)
     } else {
         info!("No existing spreadsheet found, creating a new one");
-        Ok(create_spreadsheet(creds, nickname, spreadsheet).await?)
+        Ok(create_spreadsheet(creds, nickname, spreadsheet)?)
     }
 }
 
 /// Creates the specified spreadsheet in the user's Google Drive. Saves the
 /// created spreadsheet ID under the specified nickname in the known sheets file
 /// and return the URL of the created sheet.
-pub async fn create_spreadsheet(
+pub fn create_spreadsheet(
     creds: &Token,
     nickname: SheetNickname,
     spreadsheet: Spreadsheet,
 ) -> Result<String, TryWithCredentialsError> {
-    let url = reqwest::Url::parse(ENDPOINT_SPREADSHEETS).expect("hardcoded URL should be valid");
-    let client = reqwest::Client::new();
     trace!("Sending request to create sheet");
-    let response = client
-        .post(url)
-        .bearer_auth(creds.access_token().secret())
-        .json(&spreadsheet)
-        .send()
-        .await
-        .map_err(anyhow::Error::from)?;
-
-    if !response.status().is_success() {
-        if response.status() == StatusCode::UNAUTHORIZED {
+    let response = ureq::get(ENDPOINT_SPREADSHEETS)
+        .set(AUTHORIZATION.as_str(), format!("Bearer {}", creds.access_token().secret()).as_str())
+        .send_json(&spreadsheet);
+    let successful_response = match response {
+        Ok(response) => response,
+        Err(ureq::Error::Status(status_code, _)) if status_code == StatusCode::UNAUTHORIZED => {
             return Err(TryWithCredentialsError::Unauthorized(anyhow!(
                 "Request to create sheet was unauthorized with status code: {}",
-                response.status()
-            )));
-        } else {
-            return Err(TryWithCredentialsError::Other(anyhow!(
-                "Request to create sheet failed with status code: {}",
-                response.status()
+                status_code
             )));
         }
-    }
+        Err(err) => {
+            return Err(TryWithCredentialsError::Other(anyhow!(
+                "Request to create sheet failed: {}",
+                err
+            )));
+        }
+    };
 
     #[derive(Deserialize)]
     struct ApiResponse {
@@ -97,13 +93,16 @@ pub async fn create_spreadsheet(
         spreadsheet_url: String,
     }
     let ApiResponse { spreadsheet_id, spreadsheet_url } =
-        response.json().await.map_err(anyhow::Error::from)?;
+        successful_response.into_json().map_err(anyhow::Error::from)?;
 
     debug!(
         "Saving the spreadsheet under the nickname {}",
-        serde_json::to_string(&nickname).as_ref().map(|s| s.as_str()).unwrap_or("error serializing nickname")
+        serde_json::to_string(&nickname)
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("error serializing nickname")
     );
-    if let Err(e) = update_known_sheets_file(nickname, &spreadsheet_id).await {
+    if let Err(e) = update_known_sheets_file(nickname, &spreadsheet_id) {
         warn!("Failed to update known sheets file: {}", e);
     };
 
@@ -111,39 +110,38 @@ pub async fn create_spreadsheet(
     Ok(spreadsheet_url)
 }
 
-pub async fn update_spreadsheet(
+pub fn update_spreadsheet(
     creds: &Token,
     spreadsheet_id: &str,
     spreadsheet: Spreadsheet,
 ) -> Result<String, TryWithCredentialsError> {
-    let client = reqwest::Client::new();
-
     // get the current spreadsheet data so we can merge the new data with it
     let existing_spreadsheet: Spreadsheet = {
-        let url = reqwest::Url::parse(&format!("{ENDPOINT_SPREADSHEETS}/{spreadsheet_id}"))
-            .map_err(anyhow::Error::from)?;
-        let request = client
-            .get(url)
-            .bearer_auth(creds.access_token().secret())
-            .build()
-            .map_err(anyhow::Error::from)?;
-        let response = client.execute(request).await.map_err(anyhow::Error::from)?;
+        let url = format!("{ENDPOINT_SPREADSHEETS}/{spreadsheet_id}");
+        let response = ureq::get(&url)
+            .set(
+                AUTHORIZATION.as_str(),
+                format!("Bearer {}", creds.access_token().secret()).as_str(),
+            )
+            .call();
 
-        if !response.status().is_success() {
-            if response.status() == StatusCode::UNAUTHORIZED {
+        let success_response = match response {
+            Ok(response) => response,
+            Err(ureq::Error::Status(status_code, _)) if status_code == StatusCode::UNAUTHORIZED => {
                 return Err(TryWithCredentialsError::Unauthorized(anyhow!(
                     "Request to get current sheet was unauthorized with status code: {}",
-                    response.status()
-                )));
-            } else {
-                return Err(TryWithCredentialsError::Other(anyhow!(
-                    "Request to get current sheet failed with status code: {}",
-                    response.status()
+                    status_code
                 )));
             }
-        }
+            Err(err) => {
+                return Err(TryWithCredentialsError::Other(anyhow!(
+                    "Request to get current sheet failed: {}",
+                    err
+                )));
+            }
+        };
 
-        response.json().await.map_err(anyhow::Error::from)?
+        success_response.into_json().map_err(anyhow::Error::from)?
     };
 
     // keep track of existing sheet IDs so we can update existing sheets, as
@@ -237,28 +235,26 @@ pub async fn update_spreadsheet(
         "responseIncludeGridData": false,
     });
 
-    let url = reqwest::Url::parse(&format!("{ENDPOINT_SPREADSHEETS}/{spreadsheet_id}:batchUpdate"))
-        .map_err(anyhow::Error::from)?;
-    let request = client
-        .post(url)
-        .bearer_auth(creds.access_token().secret())
-        .json(&request_body)
-        .build()
-        .map_err(anyhow::Error::from)?;
-    let response = client.execute(request).await.map_err(anyhow::Error::from)?;
-    if !response.status().is_success() {
-        if response.status() == StatusCode::UNAUTHORIZED {
+    let url = format!("{ENDPOINT_SPREADSHEETS}/{spreadsheet_id}:batchUpdate");
+
+    let response = ureq::post(&url)
+        .set(AUTHORIZATION.as_str(), format!("Bearer {}", creds.access_token().secret()).as_str())
+        .send_json(&request_body);
+    let successful_response = match response {
+        Ok(response) => response,
+        Err(ureq::Error::Status(status_code, _)) if status_code == StatusCode::UNAUTHORIZED => {
             return Err(TryWithCredentialsError::Unauthorized(anyhow!(
                 "Request to update spreadsheet was unauthorized with status code: {}",
-                response.status()
-            )));
-        } else {
-            return Err(TryWithCredentialsError::Other(anyhow!(
-                "Request to update spreadsheet failed with status code: {}",
-                response.status()
+                status_code
             )));
         }
-    }
+        Err(err) => {
+            return Err(TryWithCredentialsError::Other(anyhow!(
+                "Request to update spreadsheet failed: {}",
+                err
+            )));
+        }
+    };
 
     #[derive(Deserialize)]
     struct ApiResponse {
@@ -266,7 +262,8 @@ pub async fn update_spreadsheet(
         #[serde(rename = "updatedSpreadsheet")]
         updated_spreadsheet: Option<Spreadsheet>,
     }
-    let response_content: ApiResponse = response.json().await.map_err(anyhow::Error::from)?;
+    let response_content: ApiResponse =
+        successful_response.into_json().map_err(anyhow::Error::from)?;
     trace!("Received replies to updating sheet: {}", response_content.replies);
 
     let url = 'url: {
@@ -289,14 +286,14 @@ pub async fn update_spreadsheet(
 /// the spreadsheet ID.
 type KnownSheets<'a> = HashMap<SheetNickname, Cow<'a, str>>;
 
-pub async fn update_known_sheets_file(
+pub fn update_known_sheets_file(
     nickname: SheetNickname,
     spreadsheet_id: &str,
 ) -> std::io::Result<()> {
     let path = Path::new(KNOWN_SHEETS_FILE);
 
     // deserialize the existing known sheets
-    let mut known_sheets: KnownSheets = if let Ok(file_contents) = tokio::fs::read(path).await {
+    let mut known_sheets: KnownSheets = if let Ok(file_contents) = std::fs::read(path) {
         match serde_json::from_reader(Cursor::new(file_contents)) {
             Ok(sheets) => sheets,
             Err(e) => {
@@ -314,7 +311,7 @@ pub async fn update_known_sheets_file(
     // Serialize the updated known sheets back to the file
     let mut buffer = Vec::new();
     serde_json::to_writer(&mut buffer, &known_sheets)?;
-    tokio::fs::write(path, &buffer).await?;
+    std::fs::write(path, &buffer)?;
 
     info!("Updated known sheets file with new sheet ID for {}", nickname);
 
@@ -323,8 +320,8 @@ pub async fn update_known_sheets_file(
 
 /// Reads the known sheets file and returns the value associated with the
 /// specified nickname.
-pub async fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
-    let file_contents = match tokio::fs::read(KNOWN_SHEETS_FILE).await {
+pub fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
+    let file_contents = match std::fs::read(KNOWN_SHEETS_FILE) {
         Ok(file_contents) => file_contents,
         Err(e) => {
             if e.kind() != std::io::ErrorKind::NotFound {

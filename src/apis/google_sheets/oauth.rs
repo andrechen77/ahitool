@@ -1,18 +1,9 @@
-use std::convert::Infallible;
-use std::future::Future;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::service::service_fn;
 use hyper::StatusCode;
-use hyper::{body::Incoming as IncomingBody, server::conn::http1, Request, Response};
-use hyper_util::rt::TokioIo;
 use oauth2::basic::BasicTokenResponse;
-use oauth2::reqwest::async_http_client;
 use oauth2::{
     basic::BasicClient, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, Scope,
     TokenUrl,
@@ -21,9 +12,11 @@ use oauth2::{AuthorizationCode, RedirectUrl, RefreshToken, TokenResponse};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
+use std::net::TcpListener;
 use thiserror::Error;
-use tokio::{net::TcpListener, sync::oneshot};
+use tiny_http::Response;
 use tracing::{debug, trace, warn};
+use url::Url;
 
 use crate::utils;
 
@@ -54,10 +47,9 @@ pub enum TryWithCredentialsError {
 
 /// Runs a function that requires OAuth credentials. If the provided function
 /// returns an error, this is interpreted as the credentials being invalid.
-pub async fn run_with_credentials<F, O, U>(mut operation: O) -> anyhow::Result<U>
+pub fn run_with_credentials<F, U>(mut function: F) -> anyhow::Result<U>
 where
-    O: FnMut(&Token) -> F, // TODO find a way to make this work with &Token without lifetimes screaming at you
-    F: Future<Output = Result<U, TryWithCredentialsError>>,
+    F: FnMut(&Token) -> Result<U, TryWithCredentialsError>,
 {
     let cache_file = Path::new(DEFAULT_CACHE_FILE);
 
@@ -66,7 +58,7 @@ where
         Some((cached_token, false)) => {
             // attempt to run the function with the cached token
             trace!("using cached token to perform operation");
-            match operation(&cached_token.token).await {
+            match function(&cached_token.token) {
                 Ok(result) => {
                     // the function worked the first time. since we did not
                     // refresh anything, we do not need to cache the token again
@@ -106,7 +98,7 @@ where
             break 'refresh;
         };
         trace!("found refresh token. attempting to refresh");
-        let refreshed_token = match refresh_credentials(refresh_token).await {
+        let refreshed_token = match refresh_credentials(refresh_token) {
             Ok(refreshed_token) => {
                 debug!("successfully refreshed token");
                 refreshed_token
@@ -117,7 +109,7 @@ where
             }
         };
         trace!("performing operation with refreshed token");
-        match operation(&refreshed_token.token).await {
+        match function(&refreshed_token.token) {
             Ok(result) => {
                 // the function worked with a refreshed token. cache this
                 // refreshed token
@@ -140,14 +132,14 @@ where
     // getting to this point means the refreshed token did not work. attempt
     // to get totally fresh credentials and run again
     trace!("attempting to get totally fresh credentials");
-    let fresh_token = match get_fresh_credentials().await {
+    let fresh_token = match get_fresh_credentials() {
         Ok(fresh_token) => fresh_token,
         Err(e) => {
             warn!("failed to get fresh OAuth credentials: {}", e);
             return Err(e);
         }
     };
-    let err = match operation(&fresh_token.token).await {
+    let err = match function(&fresh_token.token) {
         Ok(result) => {
             // the function worked with a fresh token
             debug!("caching fresh token to {}", cache_file.display());
@@ -218,23 +210,21 @@ fn get_cached_token(cache_file: &Path) -> Option<(TokenWithExpiration, bool)> {
     }
 }
 
-async fn refresh_credentials(refresh_token: &RefreshToken) -> anyhow::Result<TokenWithExpiration> {
+fn refresh_credentials(refresh_token: &RefreshToken) -> anyhow::Result<TokenWithExpiration> {
     let time_obtained = Utc::now();
-    let mut token = oauth2_client()
-        .exchange_refresh_token(refresh_token)
-        .request_async(async_http_client)
-        .await?;
+    let mut token =
+        oauth2_client().exchange_refresh_token(refresh_token).request(oauth2::ureq::http_client)?;
     token.set_refresh_token(Some(refresh_token.clone()));
     Ok(TokenWithExpiration { token, time_obtained })
 }
 
-async fn get_fresh_credentials() -> anyhow::Result<TokenWithExpiration> {
+fn get_fresh_credentials() -> anyhow::Result<TokenWithExpiration> {
     // get the current time so we can calculate the expiration date
     let time_obtained = Utc::now();
 
     // establish a server to listen for the authorization code
     let addr: SocketAddr = ([127, 0, 0, 1], 0).into(); // request any port
-    let tcp_listener = TcpListener::bind(addr).await?;
+    let tcp_listener = TcpListener::bind(addr)?;
 
     // create OAuth2 client
     let client = oauth2_client().set_redirect_uri(
@@ -251,93 +241,84 @@ async fn get_fresh_credentials() -> anyhow::Result<TokenWithExpiration> {
         .set_pkce_challenge(pkce_challenge)
         .url();
 
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(listen_for_code(tcp_listener, tx, csrf_token));
     utils::open_url(auth_url.as_str());
-    let code = rx.await?;
+    let code = listen_for_code(tcp_listener, csrf_token)?;
 
     let token = client
         .exchange_code(AuthorizationCode::new(code))
         .set_pkce_verifier(pkce_verifier)
-        .request_async(async_http_client)
-        .await?;
+        .request(oauth2::ureq::http_client)?;
 
     Ok(TokenWithExpiration { token, time_obtained })
 }
 
-async fn listen_for_code(
-    tcp_listener: TcpListener,
-    response_tx: oneshot::Sender<String>,
-    csrf_token: CsrfToken,
-) -> anyhow::Result<()> {
-    let (tcp_stream, _) = tcp_listener.accept().await?;
-    let tcp_stream = TokioIo::new(tcp_stream);
+fn listen_for_code(tcp_listener: TcpListener, csrf_token: CsrfToken) -> anyhow::Result<String> {
+    // mapping the error is required because otherwise it won't compile for some
+    // strange reason that I don't feel like diagnosing
+    let server = tiny_http::Server::from_listener(tcp_listener, None)
+        .map_err(|e| anyhow::Error::msg(e.to_string()))?;
 
-    let response_tx = Mutex::new(Some(response_tx));
-    let handle_request = |req: Request<IncomingBody>| {
-        let csrf_token = &csrf_token;
-        let response_tx = &response_tx;
-        async move {
-            fn mk_response(resp: &'static str) -> Result<Response<Full<Bytes>>, Infallible> {
-                Ok::<_, Infallible>(Response::new(Full::new(Bytes::from(resp))))
-            }
+    'request_loop: for req in server.incoming_requests() {
+        // prepend a dummy protocol and host name so that it can be parsed
+        let path_and_query = req.url();
+        let url = format!("http://localhost{}", path_and_query);
+        let Ok(url) = Url::parse(&url) else {
+            warn!("failed to parse path to requested resource: {}", path_and_query);
+            continue 'request_loop;
+        };
 
-            // verify that this is a request we care about. in particular, we
-            // want to ignore requests to paths like /favicon.ico
-            if req.uri().path() != "/" {
-                return Ok(Response::builder()
-                    .status(StatusCode::NO_CONTENT)
-                    .body(Full::new(Bytes::new()))
-                    .expect("This should be a valid response"));
-            }
-
-            // find the code and verify the state in the query string
-            let code = {
-                let mut code = None;
-                let mut state_matches = false;
-                for (k, v) in
-                    url::form_urlencoded::parse(req.uri().query().unwrap_or("").as_bytes())
-                {
-                    match k.as_ref() {
-                        "code" => code = Some(v),
-                        "state" => {
-                            if *csrf_token.secret() == v {
-                                state_matches = true;
-                            } else {
-                                // ignore the rest of this request as it is invalid
-                                break;
-                            }
-                        }
-                        _ => (),
-                    }
-                }
-                if state_matches {
-                    if let Some(code) = code {
-                        code
-                    } else {
-                        return mk_response("Authorization code not found in redirect. Try again or contact the developer.");
-                    }
-                } else {
-                    // the request did not include a valid state, so it must be
-                    // rejected
-                    warn!("Authorization redirect did not include a valid state. This may be an indication of an attempted attack.");
-                    return mk_response("Authorization code rejected due to invalid state. Try again or contact the developer.");
-                }
-            };
-
-            // attempt to send the valid code back
-            if let Some(response_tx) = response_tx.lock().unwrap().take() {
-                let _ = response_tx.send(code.into_owned());
-                mk_response("Authorization code received. You can now close this window.")
-            } else {
-                mk_response("The app may have already been authorized; if not then try again.")
-            }
+        if url.path() != "/" {
+            let response = Response::empty(StatusCode::NO_CONTENT.as_u16());
+            req.respond(response)?;
+            continue 'request_loop;
         }
-    };
 
-    http1::Builder::new().serve_connection(tcp_stream, service_fn(handle_request)).await?;
+        // find the code and verify the state in the query string
+        let code = {
+            let mut code = None;
+            let mut state_matches = false;
+            for (k, v) in url.query_pairs() {
+                match k.as_ref() {
+                    "code" => code = Some(v),
+                    "state" => {
+                        if *csrf_token.secret() == v {
+                            state_matches = true;
+                        } else {
+                            // ignore the rest of this request as it is invalid
+                            break;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            if state_matches {
+                if let Some(code) = code {
+                    code
+                } else {
+                    if let Err(e) = req.respond(Response::from_string("Authorization code not found in redirect. Try again or contact the developer.")) {
+                        warn!("failed to respond to request: {}", e);
+                    }
+                    continue 'request_loop;
+                }
+            } else {
+                // the request did not include a valid state, so it must be
+                // rejected
+                warn!("Authorization redirect did not include a valid state. This may be an indication of an attempted attack.");
+                if let Err(e) = req.respond(Response::from_string("Authorization code rejected due to invalid state. Try again or contact the developer.")) {
+                    warn!("failed to respond to request: {}", e);
+                }
+                continue 'request_loop;
+            }
+        };
 
-    Ok(())
+        req.respond(Response::from_string(
+            "Authorization code received. You can now close this window.",
+        ))?;
+        return Ok(code.into_owned());
+    }
+
+    // getting here means the server stopped listening
+    return Err(anyhow::anyhow!("server stopped listening for authorization code"));
 }
 
 fn oauth2_client() -> BasicClient {

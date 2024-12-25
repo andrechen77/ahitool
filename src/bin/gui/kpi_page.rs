@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread};
 
 use ahitool::tools::{
     self,
@@ -6,7 +6,10 @@ use ahitool::tools::{
 };
 use tracing::warn;
 
-use crate::{data_loader::DataLoader, job_nimbus_client::JobNimbusClient, resource};
+use crate::{
+    data_loader::DataLoader,
+    job_nimbus_client::{JobNimbusClient, JobNimbusData},
+};
 
 #[derive(Default)]
 pub struct KpiPage {
@@ -24,12 +27,7 @@ impl KpiPage {
             if let Some(jn_data) = jn_client.data.get_mut().as_ref() {
                 if ui.button("Calculate KPIs").clicked() {
                     let jn_data = Arc::clone(jn_data);
-                    let kpi_data_tx = self.kpi_data.start_fetch();
-                    resource::runtime().spawn(async move {
-                        let kpi_data =
-                            tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), (None, None));
-                        let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
-                    });
+                    self.start_calculate(jn_data);
                 }
 
                 if let Some(kpi_data) = self.kpi_data.get_mut().as_ref() {
@@ -42,7 +40,6 @@ impl KpiPage {
                 return;
             }
         });
-        let kpi_data = self.kpi_data.get_mut();
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
             ui.heading("Export to Google Sheets");
             ui.horizontal(|ui| {
@@ -50,6 +47,7 @@ impl KpiPage {
                 ui.text_edit_singleline(&mut self.spreadsheet_id);
             });
             ui.horizontal(|ui| {
+                let kpi_data = self.kpi_data.get_mut();
                 let fetch_in_progress = self.export_data.fetch_in_progress();
                 let button = ui.add_enabled(
                     kpi_data.is_some() && !fetch_in_progress,
@@ -61,20 +59,39 @@ impl KpiPage {
                 if button.clicked() {
                     let spreadsheet_id =
                         Some(self.spreadsheet_id.clone()).filter(|s| !s.is_empty());
-                    if let Some(kpi_data) = kpi_data.as_ref().cloned() {
-                        let export_complete_tx = self.export_data.start_fetch();
-                        resource::runtime().spawn_blocking(move || {
-                            if let Err(err) = tools::kpi::output::generate_report_google_sheets(
-                                &kpi_data,
-                                spreadsheet_id.as_deref(),
-                            ) {
-                                warn!("Error exporting to Google Sheets: {}", err);
-                            }
-                            let _ = export_complete_tx.send(());
-                        });
+                    if let Some(data) = kpi_data.as_ref().cloned() {
+                        // stop borrowing self before we borrow it again to
+                        // generate the google sheets
+                        drop(kpi_data);
+                        self.start_generate_google_sheets(data, spreadsheet_id);
                     }
                 }
             });
+        });
+    }
+
+    fn start_calculate(&mut self, jn_data: Arc<JobNimbusData>) {
+        let kpi_data_tx = self.kpi_data.start_fetch();
+        thread::spawn(move || {
+            let kpi_data = tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), (None, None));
+            let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
+        });
+    }
+
+    fn start_generate_google_sheets(
+        &mut self,
+        kpi_data: Arc<KpiData>,
+        spreadsheet_id: Option<String>,
+    ) {
+        let export_complete_tx = self.export_data.start_fetch();
+        thread::spawn(move || {
+            if let Err(err) = tools::kpi::output::generate_report_google_sheets(
+                &kpi_data,
+                spreadsheet_id.as_deref(),
+            ) {
+                warn!("Error exporting to Google Sheets: {}", err);
+            }
+            let _ = export_complete_tx.send(());
         });
     }
 }

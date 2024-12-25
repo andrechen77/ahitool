@@ -11,30 +11,11 @@ mod data_loader;
 mod job_nimbus_client;
 mod kpi_page;
 
-mod resource {
-    use std::sync::OnceLock;
-    use tokio::runtime;
-
-    pub fn runtime() -> &'static runtime::Runtime {
-        static RUNTIME: OnceLock<runtime::Runtime> = OnceLock::new();
-        let rt = RUNTIME
-            .get_or_init(|| runtime::Builder::new_multi_thread().enable_all().build().unwrap());
-        rt
-    }
-
-    pub fn client() -> reqwest::Client {
-        static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-        let client = CLIENT.get_or_init(|| reqwest::Client::new());
-        client.clone()
-    }
-}
-
 fn main() {
     // set up tracing
     tracing_subscriber::fmt::init();
 
-    let app_state =
-        resource::runtime().block_on(async move { AppState::with_cached_storage().await });
+    let app_state = AppState::with_cached_storage();
 
     // run the UI on the main thread
     let result =
@@ -101,10 +82,9 @@ impl eframe::App for AppState {
 }
 
 impl AppState {
-    async fn with_cached_storage() -> Self {
-        let jn_api_key = job_nimbus::get_api_key(std::env::var("JN_API_KEY").ok())
-            .await
-            .unwrap_or_else(|e| match e {
+    fn with_cached_storage() -> Self {
+        let jn_api_key =
+            job_nimbus::get_api_key(std::env::var("JN_API_KEY").ok()).unwrap_or_else(|e| match e {
                 job_nimbus::GetApiKeyError::MissingApiKey => {
                     warn!(
                         "No JobNimbus API key provided and no cache file found; using empty string"
@@ -117,18 +97,17 @@ impl AppState {
                 }
             });
 
-        let kpi_spreadsheet_id =
-            match google_sheets::read_known_sheets_file(SheetNickname::Kpi).await {
-                Ok(Some(id)) => id,
-                Ok(None) => {
-                    warn!("No KPI spreadsheet ID found in known sheets file; using empty string");
-                    String::new()
-                }
-                Err(e) => {
-                    warn!("Error reading known sheets file; using empty string: {}", e);
-                    String::new()
-                }
-            };
+        let kpi_spreadsheet_id = match google_sheets::read_known_sheets_file(SheetNickname::Kpi) {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                warn!("No KPI spreadsheet ID found in known sheets file; using empty string");
+                String::new()
+            }
+            Err(e) => {
+                warn!("Error reading known sheets file; using empty string: {}", e);
+                String::new()
+            }
+        };
 
         Self {
             job_nimbus_client: JobNimbusClient { api_key: jn_api_key, ..Default::default() },

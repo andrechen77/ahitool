@@ -97,15 +97,14 @@ pub fn print_human(results: &AccRecvableData, mut writer: impl Write) -> std::io
 
 pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Result<()> {
     let mut writer = csv::Writer::from_writer(writer);
-    writer
-        .write_record(&[
-            "Job Name",
-            "Sales Rep",
-            "Job Number",
-            "Job Status",
-            "Amount",
-            "Days In Status",
-        ])?;
+    writer.write_record(&[
+        "Job Name",
+        "Sales Rep",
+        "Job Number",
+        "Job Status",
+        "Amount",
+        "Days In Status",
+    ])?;
     for (_status, (_category_total, jobs)) in &results.categorized_jobs {
         for job in jobs {
             let name = job.job_name.as_deref().unwrap_or("");
@@ -114,15 +113,14 @@ pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Resu
             let status = format!("{}", job.status);
             let amount_receivable = (job.amt_receivable as f64) / 100.0;
             let days_in_status = Utc::now().signed_duration_since(job.status_mod_date).num_days();
-            writer
-                .write_record(&[
-                    name,
-                    sales_rep,
-                    number,
-                    &status,
-                    &amount_receivable.to_string(),
-                    &days_in_status.to_string(),
-                ])?;
+            writer.write_record(&[
+                name,
+                sales_rep,
+                number,
+                &status,
+                &amount_receivable.to_string(),
+                &days_in_status.to_string(),
+            ])?;
         }
     }
     writer.flush()?;
@@ -184,27 +182,18 @@ pub fn generate_report_google_sheets(
         ..Default::default()
     };
 
-    let url = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(
-        google_sheets::run_with_credentials(|token| {
-            // FIXME cloning the token is a workaround because I can't
-            // get lifetimes to work correctly in run_with_credentials
-            let token = token.clone();
-            let spreadsheet = &spreadsheet;
-            async move {
-                let spreadsheet = spreadsheet.clone();
-                if let Some(spreadsheet_id) = spreadsheet_id {
-                    google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet).await
-                } else {
-                    google_sheets::create_spreadsheet(
-                        &token,
-                        google_sheets::SheetNickname::AccReceivable,
-                        spreadsheet,
-                    )
-                    .await
-                }
-            }
-        }),
-    )?;
+    let url = google_sheets::run_with_credentials(|token| {
+        let spreadsheet = spreadsheet.clone();
+        if let Some(spreadsheet_id) = spreadsheet_id {
+            google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet)
+        } else {
+            google_sheets::create_spreadsheet(
+                &token,
+                google_sheets::SheetNickname::AccReceivable,
+                spreadsheet,
+            )
+        }
+    })?;
     utils::open_url(url.as_str());
     Ok(())
 }

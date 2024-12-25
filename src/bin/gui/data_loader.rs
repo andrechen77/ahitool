@@ -1,9 +1,10 @@
 use std::{
     cell::Cell,
-    sync::{Mutex, MutexGuard},
+    sync::{
+        mpsc::{channel, Receiver, Sender, TryRecvError},
+        Mutex, MutexGuard,
+    },
 };
-
-use tokio::sync::oneshot::{self, error::TryRecvError};
 
 #[derive(Default)]
 pub struct DataLoader<T> {
@@ -11,7 +12,7 @@ pub struct DataLoader<T> {
     data: Mutex<T>,
     /// If there is a fetch in progress, this holds the receiver for the
     /// response of the fetch.
-    rx: Cell<Option<oneshot::Receiver<T>>>,
+    rx: Cell<Option<Receiver<T>>>,
 }
 
 impl<T> DataLoader<T> {
@@ -21,7 +22,7 @@ impl<T> DataLoader<T> {
     }
 
     pub fn get_mut(&self) -> MutexGuard<'_, T> {
-        if let Some(mut rx) = self.rx.take() {
+        if let Some(rx) = self.rx.take() {
             match rx.try_recv() {
                 Ok(new_data) => {
                     let mut guard = self.data.lock().unwrap();
@@ -33,7 +34,7 @@ impl<T> DataLoader<T> {
                     // value
                     self.rx.set(Some(rx));
                 }
-                Err(TryRecvError::Closed) => {
+                Err(TryRecvError::Disconnected) => {
                     // do not put the receive back since there is no chance it
                     // will produce a value
                 }
@@ -43,7 +44,7 @@ impl<T> DataLoader<T> {
     }
 
     pub fn fetch_in_progress(&self) -> bool {
-        if let Some(mut rx) = self.rx.take() {
+        if let Some(rx) = self.rx.take() {
             match rx.try_recv() {
                 Ok(new_data) => {
                     *self.data.lock().unwrap() = new_data;
@@ -53,7 +54,7 @@ impl<T> DataLoader<T> {
                     self.rx.set(Some(rx));
                     true
                 }
-                Err(TryRecvError::Closed) => false,
+                Err(TryRecvError::Disconnected) => false,
             }
         } else {
             false
@@ -63,8 +64,8 @@ impl<T> DataLoader<T> {
     /// Marks the `DataLoader` as having a fetch in progress, returning the
     /// sender that the fetching task should use to report the response.
     #[must_use]
-    pub fn start_fetch(&mut self) -> oneshot::Sender<T> {
-        let (tx, rx) = oneshot::channel();
+    pub fn start_fetch(&mut self) -> Sender<T> {
+        let (tx, rx) = channel();
         self.rx.set(Some(rx));
         tx
     }

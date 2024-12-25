@@ -1,10 +1,10 @@
-use std::{future::Future, sync::Arc};
+use std::{sync::Arc, thread};
 
 use ahitool::{apis::job_nimbus, jobs::Job};
 use chrono::{DateTime, Utc};
 use tracing::{trace, warn};
 
-use crate::{data_loader::DataLoader, resource};
+use crate::data_loader::DataLoader;
 
 pub struct JobNimbusData {
     pub fetched: DateTime<Utc>,
@@ -51,7 +51,7 @@ impl JobNimbusClient {
                 ));
             }
             if button.clicked() {
-                resource::runtime().spawn(self.fetch());
+                self.start_fetch();
             }
         });
         if let Some(data) = self.data.get_mut().as_ref() {
@@ -59,31 +59,28 @@ impl JobNimbusClient {
         }
     }
 
-    fn fetch(&mut self) -> impl Future<Output = ()> {
+    /// Starts a fetch running on a separate thread. The data will be available
+    /// in `self.data`.
+    fn start_fetch(&mut self) {
         // Clone all the data we need up front, so that the resulting future
         // has no lifetime dependencies on self.
         let data_tx = self.data.start_fetch();
         let api_key = self.api_key.clone();
 
-        async move {
-            trace!("a");
-            let answer =
-                match job_nimbus::get_all_jobs_from_job_nimbus(resource::client(), &api_key, None)
-                    .await
-                {
-                    Ok(jobs) => {
-                        let now = Utc::now();
-                        trace!("b");
-                        let jobs = jobs.map(|job| Arc::new(job)).collect();
-                        Some(Arc::new(JobNimbusData { fetched: now, jobs }))
-                    }
-                    Err(e) => {
-                        warn!("error fetching jobs: {}", e);
-                        None
-                    }
-                };
-            trace!("data retrieved; sending back to client");
+        thread::spawn(move || {
+            let answer = match job_nimbus::get_all_jobs_from_job_nimbus(&api_key, None) {
+                Ok(jobs) => {
+                    let now = Utc::now();
+                    let jobs = jobs.map(|job| Arc::new(job)).collect();
+                    Some(Arc::new(JobNimbusData { fetched: now, jobs }))
+                }
+                Err(e) => {
+                    warn!("error fetching jobs: {}", e);
+                    None
+                }
+            };
+            trace!("fetch complete; sending results back to UI component");
             let _ = data_tx.send(answer);
-        }
+        });
     }
 }

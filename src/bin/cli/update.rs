@@ -7,8 +7,8 @@ pub struct Args {
     repo: String,
 }
 
-pub async fn main(args: Args) -> anyhow::Result<()> {
+pub fn main(args: Args) -> anyhow::Result<()> {
     let Args { repo } = args;
-    tokio::task::spawn_blocking(move || update_executable(&repo)).await??;
+    update_executable(&repo)?;
     Ok(())
 }

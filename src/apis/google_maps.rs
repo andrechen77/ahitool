@@ -17,39 +17,43 @@ pub enum LookupError {
     Other(#[from] anyhow::Error),
 }
 
-pub async fn lookup(
-    client: reqwest::Client,
-    api_key: &str,
-    address: &str,
-) -> Result<LatLng, LookupError> {
-    let url =
-        reqwest::Url::parse(ENDPOINT_GOOGLE_MAPS_PLACES).expect("hardcoded URL should be valid");
+pub fn lookup(api_key: &str, address: &str) -> Result<LatLng, LookupError> {
+    let url = ENDPOINT_GOOGLE_MAPS_PLACES;
     trace!("Sending request to look up address: {}", address);
-    let response = client
-        .post(url)
-        .query(&[("key", api_key), ("fields", "places.id,places.location,places.displayName")])
-        .json(&json!({
-            "textQuery": address
-        }))
-        .header(CONTENT_TYPE, "application/json")
-        .send()
-        .await
-        .map_err(anyhow::Error::from)?;
 
-    match response.status() {
-        StatusCode::TOO_MANY_REQUESTS => return Err(LookupError::TooFast),
-        StatusCode::OK => (),
-        status => {
-            return Err(LookupError::Other(anyhow!("Request failed with status code: {}", status)))
+    let response = ureq::post(&url)
+        .query("key", api_key)
+        .query("fields", "places.id,places.location,places.displayName")
+        .set(CONTENT_TYPE.as_str(), "application/json")
+        .send_json(&json!({
+            "textQuery": address
+        }));
+
+    let successful_response = match response {
+        Ok(response) => response,
+        Err(ureq::Error::Status(status_code, _))
+            if status_code == StatusCode::TOO_MANY_REQUESTS =>
+        {
+            return Err(LookupError::TooFast);
         }
-    }
+        Err(ureq::Error::Status(status_code, _)) => {
+            return Err(LookupError::Other(anyhow!(
+                "Request failed with status code: {}",
+                status_code
+            )));
+        }
+        Err(err) => {
+            return Err(LookupError::Other(err.into()));
+        }
+    };
 
     #[derive(Deserialize)]
     struct ApiResponse {
         places: Vec<Place>,
     }
 
-    let response: serde_json::Value = response.json().await.map_err(anyhow::Error::from)?;
+    let response: serde_json::Value =
+        successful_response.into_json().map_err(anyhow::Error::from)?;
     trace!("received response: {}", response);
     let response: ApiResponse = serde_json::from_value(response).map_err(anyhow::Error::from)?;
 

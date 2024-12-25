@@ -1,4 +1,8 @@
-use std::{fmt::{Display, Debug}, sync::Arc, usize};
+use std::{
+    fmt::{Debug, Display},
+    sync::Arc,
+    usize,
+};
 
 use tracing::warn;
 
@@ -106,12 +110,13 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq + Debug> JobTracker<M,
             if let Some(bucket) = self.bucket_after(kind, timestamps.len() - 1) {
                 bucket.cum_loss_time += loss_time;
             } else {
-                warn!("Encountered a job that was lost even after reaching all milestones: {:?}", job);
+                warn!(
+                    "Encountered a job that was lost even after reaching all milestones: {:?}",
+                    job
+                );
             }
-        } else {
-            if timestamps.len() != N {
-                warn!("If a job was not lost, it must have reached all milestones: {:?}", job);
-            }
+        } else if timestamps.len() != N {
+            warn!("If a job was not lost, it must have reached all milestones: {:?}", job);
         }
     }
 
@@ -165,7 +170,8 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq + Debug> JobTracker<M,
         let average_time_to_achieve = if num_total == 0 {
             TimeDelta::zero()
         } else {
-            total_time_to_achieve / num_total.try_into().expect("total number of jobs shouldn't overflow")
+            total_time_to_achieve
+                / num_total.try_into().expect("total number of jobs shouldn't overflow")
         };
 
         CalcStatsResult { achieved: total, conversion_rate, average_time_to_achieve }
@@ -202,7 +208,11 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq + Debug> JobTracker<M,
         let average_loss_time = if total_lost.len() == 0 {
             TimeDelta::zero()
         } else {
-            total_loss_time / total_lost.len().try_into().expect("total number of jobs lost shouldn't be large enough to overflow")
+            total_loss_time
+                / total_lost
+                    .len()
+                    .try_into()
+                    .expect("total number of jobs lost shouldn't be large enough to overflow")
         };
         (total_lost, average_loss_time)
     }

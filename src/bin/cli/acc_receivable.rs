@@ -57,11 +57,11 @@ enum OutputSpec<'s> {
     },
 }
 
-pub async fn main(args: Args) -> anyhow::Result<()> {
+pub fn main(args: Args) -> anyhow::Result<()> {
     let Args { jn_api_key, output, format, new } = args;
 
     // get the JobNimbus API key
-    let jn_api_key = job_nimbus::get_api_key(jn_api_key).await?;
+    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
 
     // parse the output
     let output: Option<&'static str> = output.map(|s| &*s.leak());
@@ -84,9 +84,7 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
                     if new {
                         None
                     } else {
-                        match google_sheets::read_known_sheets_file(SheetNickname::AccReceivable)
-                            .await
-                        {
+                        match google_sheets::read_known_sheets_file(SheetNickname::AccReceivable) {
                             Err(e) => {
                                 warn!("failed to read known sheets file: {}", e);
                                 None
@@ -119,32 +117,21 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
             .exit();
     }
 
-    let client = reqwest::Client::new();
-    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, None)
-        .await?
-        .map(|j| Arc::new(j));
-    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-        let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs);
+    let jobs = job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, None)?.map(|j| Arc::new(j));
+    let acc_recv_data = tools::acc_receivable::calculate_acc_receivable(jobs);
 
-        match output_spec {
-            OutputSpec::Human(mut writer) => {
-                tools::acc_receivable::print_human(&acc_recv_data, &mut writer)?;
-                writer.flush()?;
-            }
-            OutputSpec::Csv(mut writer) => {
-                tools::acc_receivable::print_csv(&acc_recv_data, &mut writer)?;
-                writer.flush()?;
-            }
-            OutputSpec::GoogleSheets { spreadsheet_id } => {
-                tools::acc_receivable::generate_report_google_sheets(
-                    &acc_recv_data,
-                    spreadsheet_id,
-                )?;
-            }
+    match output_spec {
+        OutputSpec::Human(mut writer) => {
+            tools::acc_receivable::print_human(&acc_recv_data, &mut writer)?;
+            writer.flush()?;
         }
-        Ok(())
-    })
-    .await??;
-
+        OutputSpec::Csv(mut writer) => {
+            tools::acc_receivable::print_csv(&acc_recv_data, &mut writer)?;
+            writer.flush()?;
+        }
+        OutputSpec::GoogleSheets { spreadsheet_id } => {
+            tools::acc_receivable::generate_report_google_sheets(&acc_recv_data, spreadsheet_id)?;
+        }
+    }
     Ok(())
 }

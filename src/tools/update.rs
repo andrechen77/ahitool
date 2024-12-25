@@ -1,8 +1,9 @@
+use hyper::header::USER_AGENT;
 use tracing::info;
 
 pub const GITHUB_REPO: &str = "andrechen77/ahitool";
 
-const USER_AGENT: &str = "andrechen77/ahitool";
+const USER_AGENT_VALUE: &str = "andrechen77/ahitool";
 
 /// The name of the asset to download.
 #[cfg(target_os = "windows")]
@@ -25,10 +26,11 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
 
     let api_url = format!("https://api.github.com/repos/{}/releases/latest", github_repo);
 
-    let client = reqwest::blocking::Client::builder().user_agent(USER_AGENT).build()?;
-
     info!("Checking for updates at {}", api_url);
-    let response: serde_json::Value = client.get(&api_url).send()?.json()?;
+    let response: serde_json::Value = ureq::get(&api_url)
+        .set(USER_AGENT.as_str(), USER_AGENT_VALUE)
+        .call()?
+        .into_json()?;
 
     let version_tag =
         response["tag_name"].as_str().ok_or(anyhow::anyhow!("No tag_name found in release"))?;
@@ -49,9 +51,13 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
         .ok_or(anyhow::anyhow!("No suitable asset found for this platform"))?;
 
     info!("Downloading asset from {}", asset_url);
-    let mut response = client.get(asset_url).send()?;
+    let response = ureq::get(asset_url)
+        .set(USER_AGENT.as_str(), USER_AGENT_VALUE)
+        .call()?;
     let mut temp_file = tempfile::Builder::new().suffix(".tmp").tempfile()?;
-    response.copy_to(&mut temp_file)?;
+    if let Err(e) = std::io::copy(&mut response.into_reader(), &mut temp_file) {
+        return Err(e.into());
+    }
 
     info!("Installing updated version");
     self_replace::self_replace(temp_file.path())?;

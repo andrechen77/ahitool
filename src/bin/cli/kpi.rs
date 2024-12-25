@@ -94,11 +94,11 @@ pub enum OutputSpec<'s> {
     },
 }
 
-pub async fn main(args: Args) -> anyhow::Result<()> {
+pub fn main(args: Args) -> anyhow::Result<()> {
     let Args { jn_api_key, filter_filename, from_date, to_date, format, output, new } = args;
 
     // get the JobNimbus API key
-    let jn_api_key = job_nimbus::get_api_key(jn_api_key).await?;
+    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
 
     // parse the output format
     let output: Option<&'static str> = output.map(|s| &*s.leak());
@@ -118,7 +118,7 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
                     if new {
                         None
                     } else {
-                        match google_sheets::read_known_sheets_file(SheetNickname::Kpi).await {
+                        match google_sheets::read_known_sheets_file(SheetNickname::Kpi) {
                             Err(e) => {
                                 warn!("failed to read known sheets file: {}", e);
                                 None
@@ -152,7 +152,7 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
 
     // get the filter to use with the query
     let filter = if let Some(filter_filename) = filter_filename {
-        Some(tokio::fs::read_to_string(filter_filename).await?)
+        Some(std::fs::read_to_string(filter_filename)?)
     } else {
         None
     };
@@ -201,41 +201,32 @@ pub async fn main(args: Args) -> anyhow::Result<()> {
     };
 
     // do the processing
-    let client = reqwest::Client::new();
     let jobs: Vec<Arc<Job>> =
-        job_nimbus::get_all_jobs_from_job_nimbus(client, &jn_api_key, filter.as_deref())
-            .await?
+        job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, filter.as_deref())?
             .map(|job| Arc::new(job))
             .collect();
-    let kpi_result =
-        tokio::task::spawn_blocking(move || tools::kpi::calculate_kpi(jobs, (from_date, to_date)))
-            .await?;
+    let kpi_result = tools::kpi::calculate_kpi(jobs, (from_date, to_date));
 
     // output the results
     use tools::kpi::output;
-    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-        match output_spec {
-            OutputSpec::HumanIntoSingleFile(mut writer) => {
-                output::human::print_entire_report_to_writer(&kpi_result, &mut writer)?;
-                writer.flush()?;
-            }
-            OutputSpec::HumanIntoDirectory(dir) => {
-                output::human::print_entire_report_directory(&kpi_result, dir)?;
-            }
-            OutputSpec::CsvIntoSingleFile(mut writer) => {
-                output::csv::print_entire_report_to_writer(&kpi_result, &mut writer)?;
-                writer.flush()?;
-            }
-            OutputSpec::CsvIntoDirectory(dir) => {
-                output::csv::print_entire_report_directory(&kpi_result, dir)?;
-            }
-            OutputSpec::GoogleSheets { spreadsheet_id } => {
-                output::generate_report_google_sheets(&kpi_result, spreadsheet_id)?;
-            }
+    match output_spec {
+        OutputSpec::HumanIntoSingleFile(mut writer) => {
+            output::human::print_entire_report_to_writer(&kpi_result, &mut writer)?;
+            writer.flush()?;
         }
-        Ok(())
-    })
-    .await??;
-
+        OutputSpec::HumanIntoDirectory(dir) => {
+            output::human::print_entire_report_directory(&kpi_result, dir)?;
+        }
+        OutputSpec::CsvIntoSingleFile(mut writer) => {
+            output::csv::print_entire_report_to_writer(&kpi_result, &mut writer)?;
+            writer.flush()?;
+        }
+        OutputSpec::CsvIntoDirectory(dir) => {
+            output::csv::print_entire_report_directory(&kpi_result, dir)?;
+        }
+        OutputSpec::GoogleSheets { spreadsheet_id } => {
+            output::generate_report_google_sheets(&kpi_result, spreadsheet_id)?;
+        }
+    }
     Ok(())
 }

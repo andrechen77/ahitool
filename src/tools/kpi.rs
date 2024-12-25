@@ -181,8 +181,9 @@ mod processing {
 
         // calculate stats for each conversion
         let appt_continge_conv = {
-            let job_tracker::Bucket { achieved, cum_achieve_time, .. } =
-                tracker.get_bucket(iwc, Milestone::ContingencySigned.into_int()).expect("hardcoded value should be valid");
+            let job_tracker::Bucket { achieved, cum_achieve_time, .. } = tracker
+                .get_bucket(iwc, Milestone::ContingencySigned.into_int())
+                .expect("hardcoded value should be valid");
             let num_achieved = achieved.len();
             let conversion_rate = if num_insure_appts == 0 {
                 None
@@ -192,13 +193,17 @@ mod processing {
             let average_time_to_achieve = if num_achieved == 0 {
                 TimeDelta::zero()
             } else {
-                *cum_achieve_time / num_achieved.try_into().expect("number of jobs should not be great enough to overflow")
+                *cum_achieve_time
+                    / num_achieved
+                        .try_into()
+                        .expect("number of jobs should not be great enough to overflow")
             };
             ConversionStats { achieved: achieved.clone(), conversion_rate, average_time_to_achieve }
         };
         let appt_contract_insure_conv = {
-            let job_tracker::Bucket { achieved, cum_achieve_time, .. } =
-                tracker.get_bucket(iwo, Milestone::ContractSigned.into_int()).expect("hardcoded value should be valid");
+            let job_tracker::Bucket { achieved, cum_achieve_time, .. } = tracker
+                .get_bucket(iwo, Milestone::ContractSigned.into_int())
+                .expect("hardcoded value should be valid");
             let num_achieved = achieved.len();
             let conversion_rate = if num_insure_appts == 0 {
                 None
@@ -208,7 +213,10 @@ mod processing {
             let average_time_to_achieve = if num_achieved == 0 {
                 TimeDelta::zero()
             } else {
-                *cum_achieve_time / num_achieved.try_into().expect("number of jobs should not be great enough to overflow")
+                *cum_achieve_time
+                    / num_achieved
+                        .try_into()
+                        .expect("number of jobs should not be great enough to overflow")
             };
             ConversionStats { achieved: achieved.clone(), conversion_rate, average_time_to_achieve }
         };
@@ -633,29 +641,18 @@ pub mod output {
             ..Default::default()
         };
 
-        let url = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(google_sheets::run_with_credentials(|token| {
-                // FIXME cloning the token is a workaround because I can't
-                // get lifetimes to work correctly in run_with_credentials
-                let token = token.clone();
-                let spreadsheet = &spreadsheet;
-                async move {
-                    let spreadsheet = spreadsheet.clone();
-                    if let Some(spreadsheet_id) = spreadsheet_id {
-                        google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet).await
-                    } else {
-                        google_sheets::create_spreadsheet(
-                            &token,
-                            google_sheets::SheetNickname::Kpi,
-                            spreadsheet,
-                        )
-                        .await
-                    }
-                }
-            }))?;
+        let url = google_sheets::run_with_credentials(|token| {
+            let spreadsheet = spreadsheet.clone();
+            if let Some(spreadsheet_id) = spreadsheet_id {
+                google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet)
+            } else {
+                google_sheets::create_spreadsheet(
+                    &token,
+                    google_sheets::SheetNickname::Kpi,
+                    spreadsheet,
+                )
+            }
+        })?;
         utils::open_url(url.as_str());
         Ok(())
     }

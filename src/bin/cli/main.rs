@@ -18,21 +18,11 @@ fn main() {
 
     let CliArgs { command } = CliArgs::parse();
 
-    let result: anyhow::Result<()> =
-        tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
-            match command {
-                Subcommand::Kpi(job_kpi_args) => {
-                    kpi::main(job_kpi_args).await?;
-                }
-                Subcommand::Ar(acc_recv_args) => {
-                    acc_receivable::main(acc_recv_args).await?;
-                }
-                Subcommand::Update(update_args) => {
-                    update::main(update_args).await?;
-                }
-            }
-            Ok(())
-        });
+    let result = match command {
+        Subcommand::Kpi(job_kpi_args) => kpi::main(job_kpi_args),
+        Subcommand::Ar(acc_recv_args) => acc_receivable::main(acc_recv_args),
+        Subcommand::Update(update_args) => update::main(update_args),
+    };
     if let Err(err) = result {
         if let Some(cli_err) = err.downcast_ref::<clap::Error>() {
             cli_err.exit();
