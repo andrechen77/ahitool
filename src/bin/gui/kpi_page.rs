@@ -59,7 +59,7 @@ impl KpiPage {
                 if button.clicked() {
                     let spreadsheet_id =
                         Some(self.spreadsheet_id.clone()).filter(|s| !s.is_empty());
-                    if let Some(data) = kpi_data.as_ref().cloned() {
+                    if let Some(data) = kpi_data.as_ref().map(|a| Arc::clone(a)) {
                         // stop borrowing self before we borrow it again to
                         // generate the google sheets
                         drop(kpi_data);
