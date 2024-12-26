@@ -65,7 +65,7 @@ pub fn create_spreadsheet(
     spreadsheet: Spreadsheet,
 ) -> Result<String, TryWithCredentialsError> {
     trace!("Sending request to create sheet");
-    let response = ureq::get(ENDPOINT_SPREADSHEETS)
+    let response = ureq::post(ENDPOINT_SPREADSHEETS)
         .set(AUTHORIZATION.as_str(), format!("Bearer {}", creds.access_token().secret()).as_str())
         .send_json(&spreadsheet);
     let successful_response = match response {
