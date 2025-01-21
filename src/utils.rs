@@ -1,5 +1,9 @@
 use tracing::{info, warn};
 
+mod file_backed;
+
+pub use file_backed::FileBacked;
+
 pub fn open_url(url: &str) {
     match open::that(url) {
         Ok(()) => info!("Opened URL: {}", url),

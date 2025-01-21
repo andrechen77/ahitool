@@ -27,7 +27,7 @@ fn main() {
         if let Some(cli_err) = err.downcast_ref::<clap::Error>() {
             cli_err.exit();
         } else {
-            error!("error during execution: {}", err);
+            error!("error during execution: {:#}", err);
             std::process::exit(1);
         }
     }

@@ -1,6 +1,9 @@
-use std::{sync::Arc, thread};
+use std::{
+    sync::{Arc, MutexGuard},
+    thread,
+};
 
-use ahitool::{apis::job_nimbus, jobs::Job};
+use ahitool::{apis::job_nimbus, jobs::Job, utils::FileBacked};
 use chrono::{DateTime, Utc};
 use tracing::{trace, warn};
 
@@ -11,16 +14,19 @@ pub struct JobNimbusData {
     pub jobs: Vec<Arc<Job>>,
 }
 
-#[derive(Default)]
 pub struct JobNimbusClient {
     pub show_api_key: bool,
     /// The API key used to fetch from JobNimbus.
-    pub api_key: String,
+    pub api_key: FileBacked<String>,
     /// The data fetched from JobNimbus.
-    pub data: DataLoader<Option<Arc<JobNimbusData>>>,
+    data: DataLoader<Option<Arc<JobNimbusData>>>,
 }
 
 impl JobNimbusClient {
+    pub fn new(api_key: FileBacked<String>) -> Self {
+        Self { show_api_key: false, api_key, data: DataLoader::new(None) }
+    }
+
     pub fn render(&mut self, ui: &mut egui::Ui) {
         ui.heading("JobNimbus");
 
@@ -28,7 +34,7 @@ impl JobNimbusClient {
             ui.label("JobNimbus API Key:");
             ui.checkbox(&mut self.show_api_key, "show");
             if self.show_api_key {
-                ui.text_edit_singleline(&mut self.api_key);
+                ui.text_edit_singleline(self.api_key.get_mut());
             } else {
                 ui.text_edit_singleline(&mut "************");
             }
@@ -65,7 +71,7 @@ impl JobNimbusClient {
         // Clone all the data we need up front, so that the resulting future
         // has no lifetime dependencies on self.
         let data_tx = self.data.start_fetch();
-        let api_key = self.api_key.clone();
+        let api_key = self.api_key.get().clone();
 
         thread::spawn(move || {
             let answer = match job_nimbus::get_all_jobs_from_job_nimbus(&api_key, None) {
@@ -82,5 +88,23 @@ impl JobNimbusClient {
             trace!("fetch complete; sending results back to UI component");
             let _ = data_tx.send(answer);
         });
+    }
+
+    pub fn get_data(&self) -> MutexGuard<Option<Arc<JobNimbusData>>> {
+        self.data.get_mut()
+    }
+
+    pub fn on_exit(&mut self) {
+        if let Err(e) = self.api_key.write_back() {
+            warn!("error writing back JobNimbus API key: {}", e);
+        }
+    }
+}
+
+impl Drop for JobNimbusClient {
+    fn drop(&mut self) {
+        if let Err(e) = self.api_key.write_back() {
+            warn!("Error writing back API key: {}", e);
+        }
     }
 }

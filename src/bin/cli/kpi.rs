@@ -7,8 +7,9 @@ use ahitool::{
     },
     jobs::Job,
     tools,
+    utils::FileBacked,
 };
-use anyhow::bail;
+use anyhow::{bail, Context};
 use chrono::{Datelike as _, NaiveDate, NaiveDateTime, NaiveTime, TimeZone as _, Utc};
 use clap::CommandFactory as _;
 use tracing::{info, warn};
@@ -98,7 +99,15 @@ pub fn main(args: Args) -> anyhow::Result<()> {
     let Args { jn_api_key, filter_filename, from_date, to_date, format, output, new } = args;
 
     // get the JobNimbus API key
-    let jn_api_key = job_nimbus::get_api_key(jn_api_key)?;
+    let jn_api_key = if let Some(key) = jn_api_key {
+        if let Err(e) = FileBacked::quick_write(job_nimbus::DEFAULT_CACHE_FILE, &key) {
+            warn!("failed to write JobNimbus API key to cache file: {}", e);
+        }
+        key
+    } else {
+        FileBacked::quick_read(job_nimbus::DEFAULT_CACHE_FILE)
+            .context("error getting JobNimbus API key")?
+    };
 
     // parse the output format
     let output: Option<&'static str> = output.map(|s| &*s.leak());

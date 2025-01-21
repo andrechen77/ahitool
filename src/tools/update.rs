@@ -27,10 +27,8 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
     let api_url = format!("https://api.github.com/repos/{}/releases/latest", github_repo);
 
     info!("Checking for updates at {}", api_url);
-    let response: serde_json::Value = ureq::get(&api_url)
-        .set(USER_AGENT.as_str(), USER_AGENT_VALUE)
-        .call()?
-        .into_json()?;
+    let response: serde_json::Value =
+        ureq::get(&api_url).set(USER_AGENT.as_str(), USER_AGENT_VALUE).call()?.into_json()?;
 
     let version_tag =
         response["tag_name"].as_str().ok_or(anyhow::anyhow!("No tag_name found in release"))?;
@@ -51,9 +49,7 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
         .ok_or(anyhow::anyhow!("No suitable asset found for this platform"))?;
 
     info!("Downloading asset from {}", asset_url);
-    let response = ureq::get(asset_url)
-        .set(USER_AGENT.as_str(), USER_AGENT_VALUE)
-        .call()?;
+    let response = ureq::get(asset_url).set(USER_AGENT.as_str(), USER_AGENT_VALUE).call()?;
     let mut temp_file = tempfile::Builder::new().suffix(".tmp").tempfile()?;
     if let Err(e) = std::io::copy(&mut response.into_reader(), &mut temp_file) {
         return Err(e.into());

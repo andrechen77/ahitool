@@ -1,39 +1,10 @@
-use std::path::Path;
-
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use tracing::{info, warn};
 
 use crate::jobs::Job;
 
-const DEFAULT_CACHE_FILE: &str = "job_nimbus_api_key.txt";
-
-#[derive(Debug, thiserror::Error)]
-pub enum GetApiKeyError {
-    #[error("JobNimbus API key was not specified and the cache file does not exist.")]
-    MissingApiKey,
-    #[error(transparent)]
-    IoError(#[from] std::io::Error),
-}
-
-pub fn get_api_key(new_api_key: Option<String>) -> Result<String, GetApiKeyError> {
-    let cache_file = Path::new(DEFAULT_CACHE_FILE);
-
-    if let Some(new_api_key) = new_api_key {
-        if let Err(err) = std::fs::write(cache_file, &new_api_key) {
-            warn!("failed to cache new API key in file: {}", err);
-        } else {
-            info!("cached new API key in file");
-        }
-        Ok(new_api_key)
-    } else if cache_file.exists() {
-        let api_key = std::fs::read_to_string(cache_file)?;
-        info!("loaded API key from cache file");
-        Ok(api_key)
-    } else {
-        Err(GetApiKeyError::MissingApiKey)
-    }
-}
+pub const DEFAULT_CACHE_FILE: &str = "job_nimbus_api_key.txt";
 
 const ENDPOINT_JOBS: &str = "https://app.jobnimbus.com/api1/jobs";
 

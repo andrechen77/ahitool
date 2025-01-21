@@ -2,7 +2,7 @@ use std::{sync::Arc, thread};
 
 use ahitool::{
     tools::{self, acc_receivable::AccRecvableData},
-    utils,
+    utils::{self, FileBacked},
 };
 use tracing::warn;
 
@@ -11,19 +11,22 @@ use crate::{
     job_nimbus_client::{JobNimbusClient, JobNimbusData},
 };
 
-#[derive(Default)]
 pub struct ArPage {
-    pub ar_data: DataLoader<Option<Arc<AccRecvableData>>>,
-    pub spreadsheet_id: String,
-    pub export_data: DataLoader<()>,
+    pub spreadsheet_id: FileBacked<String>,
+    ar_data: DataLoader<Option<Arc<AccRecvableData>>>,
+    export_data: DataLoader<()>,
 }
 
 impl ArPage {
+    pub fn new(spreadsheet_id: FileBacked<String>) -> Self {
+        Self { spreadsheet_id, ar_data: DataLoader::new(None), export_data: DataLoader::new(()) }
+    }
+
     pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| jn_client.render(ui));
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
             ui.heading("Accounts Receivable Report");
-            if let Some(jn_data) = jn_client.data.get_mut().as_ref().cloned() {
+            if let Some(jn_data) = jn_client.get_data().as_ref().cloned() {
                 if ui.button("Calculate Accounts Receivable").clicked() {
                     self.start_calculate(jn_data);
                 }
@@ -44,7 +47,7 @@ impl ArPage {
             ui.heading("Export to Google Sheets");
             ui.horizontal(|ui| {
                 ui.label("Spreadsheet ID (empty to create):");
-                ui.text_edit_singleline(&mut self.spreadsheet_id);
+                ui.text_edit_singleline(self.spreadsheet_id.get_mut());
             });
             ui.horizontal(|ui| {
                 let ar_data = self.ar_data.get_mut();
@@ -58,7 +61,7 @@ impl ArPage {
                 }
                 if button.clicked() {
                     let spreadsheet_id =
-                        Some(self.spreadsheet_id.clone()).filter(|s| !s.is_empty());
+                        Some(self.spreadsheet_id.get().clone()).filter(|s| !s.is_empty());
                     if let Some(data) = ar_data.as_ref().map(|a| Arc::clone(a)) {
                         // stop borrowing self before we borrow it again to
                         // generate the google sheets
@@ -94,6 +97,12 @@ impl ArPage {
             }
             let _ = export_data_tx.send(());
         });
+    }
+
+    pub fn on_exit(&mut self) {
+        if let Err(e) = self.spreadsheet_id.write_back() {
+            warn!("error writing back spreadsheet ID: {}", e);
+        }
     }
 }
 
