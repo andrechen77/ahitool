@@ -18,6 +18,10 @@ use crate::{
 pub struct KpiPage {
     pub selected_rep: Option<KpiSubject>,
     pub spreadsheet_id: FileBacked<String>,
+    /// The current value of the date range dropdown selector.
+    date_range_option: (DateRangeOption, DateRangeOption),
+    /// The current value of the date range custom date fields.
+    date_range_custom: (String, String),
     kpi_data: DataLoader<Option<Arc<KpiData>>>,
     export_data: DataLoader<()>,
 }
@@ -27,6 +31,8 @@ impl KpiPage {
         Self {
             selected_rep: None,
             spreadsheet_id,
+            date_range_option: Default::default(),
+            date_range_custom: Default::default(),
             kpi_data: DataLoader::new(None),
             export_data: DataLoader::new(()),
         }
@@ -35,23 +41,82 @@ impl KpiPage {
     pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| jn_client.render(ui));
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
-            ui.heading("Key Performance Indicators");
+            ui.heading("Calculate Key Performance Indicators");
+
             if let Some(jn_data) = jn_client.get_data().as_ref() {
+                egui::ComboBox::from_label("From date")
+                    .selected_text(self.date_range_option.0.to_str())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.date_range_option.0,
+                            DateRangeOption::Forever,
+                            "forever",
+                        );
+                        ui.selectable_value(
+                            &mut self.date_range_option.0,
+                            DateRangeOption::Ytd,
+                            "ytd",
+                        );
+                        ui.selectable_value(
+                            &mut self.date_range_option.0,
+                            DateRangeOption::Today,
+                            "today",
+                        );
+                        ui.selectable_value(
+                            &mut self.date_range_option.0,
+                            DateRangeOption::Custom,
+                            "custom",
+                        );
+                    });
+                if self.date_range_option.0 == DateRangeOption::Custom {
+                    ui.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut self.date_range_custom.0);
+                    });
+                }
+                egui::ComboBox::from_label("To date")
+                    .selected_text(self.date_range_option.1.to_str())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.date_range_option.1,
+                            DateRangeOption::Forever,
+                            "forever",
+                        );
+                        ui.selectable_value(
+                            &mut self.date_range_option.1,
+                            DateRangeOption::Today,
+                            "today",
+                        );
+                        ui.selectable_value(
+                            &mut self.date_range_option.1,
+                            DateRangeOption::Custom,
+                            "custom",
+                        );
+                    });
+                if self.date_range_option.1 == DateRangeOption::Custom {
+                    ui.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut self.date_range_custom.1);
+                    });
+                }
+
                 if ui.button("Calculate KPIs").clicked() {
                     let jn_data = Arc::clone(jn_data);
                     self.start_calculate(jn_data);
-                }
-
-                if let Some(kpi_data) = self.kpi_data.get_mut().as_ref() {
-                    render_stats_viewer(ui, &mut self.selected_rep, kpi_data);
-                } else {
-                    ui.label("No KPI data available; use the button to calculate.");
                 }
             } else {
                 ui.label("No JobNimbus data available; use the button to fetch");
                 return;
             }
         });
+
+        egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
+            ui.heading("KPI Stats Viewer");
+            if let Some(kpi_data) = self.kpi_data.get_mut().as_ref() {
+                render_stats_viewer(ui, &mut self.selected_rep, kpi_data);
+            } else {
+                ui.label("No KPI data available; calculate KPIs first");
+            }
+        });
+
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
             ui.heading("Export to Google Sheets");
             ui.horizontal(|ui| {
@@ -83,12 +148,34 @@ impl KpiPage {
     }
 
     fn start_calculate(&mut self, jn_data: Arc<JobNimbusData>) {
+        let date_range = match self.get_date_range() {
+            Ok(date_range) => date_range,
+            Err(e) => {
+                warn!("error parsing date range: {}", e);
+                return;
+            }
+        };
         let kpi_data_tx = self.kpi_data.start_fetch();
         thread::spawn(move || {
-            let kpi_data =
-                tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), DateRange::ALL_TIME);
+            let kpi_data = tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), date_range);
             let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
         });
+    }
+
+    fn get_date_range(&self) -> anyhow::Result<DateRange> {
+        let from_text = match self.date_range_option.0 {
+            DateRangeOption::Forever => "forever",
+            DateRangeOption::Ytd => "ytd",
+            DateRangeOption::Today => "today",
+            DateRangeOption::Custom => &self.date_range_custom.0,
+        };
+        let to_text = match self.date_range_option.1 {
+            DateRangeOption::Forever => "forever",
+            DateRangeOption::Ytd => "ytd",
+            DateRangeOption::Today => "today",
+            DateRangeOption::Custom => &self.date_range_custom.1,
+        };
+        DateRange::from_strs(from_text, to_text)
     }
 
     fn start_generate_google_sheets(
@@ -183,4 +270,24 @@ fn render_kpi_stats_table(ui: &mut egui::Ui, stats: &JobTrackerStats) {
             }
         });
     });
+}
+
+#[derive(Default, Copy, Clone, PartialEq)]
+enum DateRangeOption {
+    #[default]
+    Forever,
+    Ytd,
+    Today,
+    Custom,
+}
+
+impl DateRangeOption {
+    fn to_str(self) -> &'static str {
+        match self {
+            Self::Forever => "forever",
+            Self::Ytd => "ytd",
+            Self::Today => "today",
+            Self::Custom => "custom",
+        }
+    }
 }

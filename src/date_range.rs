@@ -18,13 +18,7 @@ impl DateRange {
     pub fn from_strs(from_date: &str, to_date: &str) -> anyhow::Result<Self> {
         let from_date = match from_date {
             "forever" => None,
-            "ytd" => Some(
-                Utc.from_utc_datetime(&NaiveDateTime::new(
-                    NaiveDate::from_ymd_opt(Utc::now().year(), 1, 1)
-                        .expect("Jan 1 should always be valid in the current year."),
-                    NaiveTime::MIN,
-                )),
-            ),
+            "ytd" => Some(start_of_year()),
             "today" => Some(Utc::now()),
             date_string => {
                 let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
@@ -52,4 +46,12 @@ impl DateRange {
 
         Ok(Self { from_date, to_date })
     }
+}
+
+pub fn start_of_year() -> Timestamp {
+    Utc.from_utc_datetime(&NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(Utc::now().year(), 1, 1)
+            .expect("Jan 1 should always be valid in the current year."),
+        NaiveTime::MIN,
+    ))
 }
