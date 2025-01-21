@@ -69,7 +69,9 @@ impl eframe::App for AppState {
 
             // display the current tool
             match self.current_tool {
-                AhitoolTool::None => {}
+                AhitoolTool::None => {
+                    ui.label("Click on the heading to choose a subtool.");
+                }
                 AhitoolTool::Kpi => self.kpi_page_state.render(ui, &mut self.job_nimbus_client),
                 AhitoolTool::Ar => self.ar_page_state.render(ui, &mut self.job_nimbus_client),
             }

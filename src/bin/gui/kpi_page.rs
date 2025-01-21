@@ -209,7 +209,7 @@ fn render_stats_viewer(
 ) {
     // display and allow user to choose current tracker
     let heading =
-        ui.label(selected_rep.as_ref().map_or("No rep selected (click me)", |rep| rep.as_str()));
+        ui.button(selected_rep.as_ref().map_or("No rep selected (click me)", |rep| rep.as_str()));
     let popup_id = ui.make_persistent_id("rep_chooser");
     if heading.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
