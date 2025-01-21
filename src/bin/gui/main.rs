@@ -1,11 +1,13 @@
 use ahitool::utils::FileBacked;
 use eframe::egui;
 use job_nimbus_client::JobNimbusClient;
+use job_viewer::JobNimbusViewer;
 use tracing::warn;
 
 mod ar_page;
 mod data_loader;
 mod job_nimbus_client;
+mod job_viewer;
 mod kpi_page;
 
 fn main() {
@@ -25,6 +27,7 @@ fn main() {
 struct AppState {
     current_tool: AhitoolTool,
     job_nimbus_client: JobNimbusClient,
+    job_nimbus_viewer: JobNimbusViewer,
     kpi_page_state: kpi_page::KpiPage,
     ar_page_state: ar_page::ArPage,
 }
@@ -33,6 +36,7 @@ struct AppState {
 enum AhitoolTool {
     #[default]
     None,
+    JobViewer,
     Kpi,
     Ar,
 }
@@ -43,6 +47,7 @@ impl eframe::App for AppState {
             // heading to display and choose the current tool
             let heading = ui.heading(match self.current_tool {
                 AhitoolTool::None => "Welcome to AHItool",
+                AhitoolTool::JobViewer => "Job Viewer",
                 AhitoolTool::Kpi => "Key Performance Indicators",
                 AhitoolTool::Ar => "Accounts Receivable",
             });
@@ -64,6 +69,9 @@ impl eframe::App for AppState {
                     if ui.button("AR").clicked() {
                         self.current_tool = AhitoolTool::Ar;
                     }
+                    if ui.button("Job Viewer").clicked() {
+                        self.current_tool = AhitoolTool::JobViewer;
+                    }
                 },
             );
 
@@ -71,6 +79,9 @@ impl eframe::App for AppState {
             match self.current_tool {
                 AhitoolTool::None => {
                     ui.label("Click on the heading to choose a subtool.");
+                }
+                AhitoolTool::JobViewer => {
+                    self.job_nimbus_viewer.render(ui, &mut self.job_nimbus_client)
                 }
                 AhitoolTool::Kpi => self.kpi_page_state.render(ui, &mut self.job_nimbus_client),
                 AhitoolTool::Ar => self.ar_page_state.render(ui, &mut self.job_nimbus_client),
@@ -100,6 +111,7 @@ impl AppState {
                 "job_nimbus_api_key.json",
                 || String::new(),
             )),
+            job_nimbus_viewer: JobNimbusViewer::new(),
             current_tool: AhitoolTool::None,
         }
     }
