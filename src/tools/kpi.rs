@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
+use crate::date_range::DateRange;
 use crate::jobs::AnalyzedJob;
 use crate::jobs::Job;
 use crate::jobs::JobAnalysisError;
-use crate::jobs::Timestamp;
 use csv as csv_crate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -38,10 +38,10 @@ pub struct KpiData {
 
 pub fn calculate_kpi<'a>(
     jobs: impl IntoIterator<Item = Arc<Job>>,
-    (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
+    date_range: DateRange,
 ) -> KpiData {
     let (trackers_by_rep, red_flags_by_rep) =
-        processing::process_jobs(jobs.into_iter(), (from_dt, to_dt));
+        processing::process_jobs(jobs.into_iter(), date_range);
     let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
         .into_iter()
         .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
@@ -56,10 +56,9 @@ mod processing {
     use tracing::info;
 
     use crate::{
+        date_range::DateRange,
         job_tracker::{self, CalcStatsResult, JobTracker3x5},
-        jobs::{
-            self, AnalyzedJob, Job, JobAnalysisError, JobKind, Milestone, TimeDelta, Timestamp,
-        },
+        jobs::{self, AnalyzedJob, Job, JobAnalysisError, JobKind, Milestone, TimeDelta},
     };
 
     use super::KpiSubject;
@@ -71,12 +70,13 @@ mod processing {
 
     pub fn process_jobs(
         jobs: impl Iterator<Item = Arc<Job>>,
-        (from_dt, to_dt): (Option<Timestamp>, Option<Timestamp>),
+        date_range: DateRange,
     ) -> TrackersAndFlags {
+        let DateRange { from_date, to_date } = date_range;
         info!(
             "Processing jobs settled between {} and {}",
-            from_dt.map(|dt| dt.to_string()).as_deref().unwrap_or("the beginning of time"),
-            to_dt.map(|dt| dt.to_string()).as_deref().unwrap_or("the end of time")
+            from_date.map(|dt| dt.to_string()).as_deref().unwrap_or("the beginning of time"),
+            to_date.map(|dt| dt.to_string()).as_deref().unwrap_or("the end of time")
         );
 
         let mut trackers = BTreeMap::new();
@@ -92,8 +92,8 @@ mod processing {
                 // only add jobs that were settled
                 if let Some(date_settled) = analysis.date_settled() {
                     // only add jobs that were settled within the date range
-                    if (from_dt.is_none() || date_settled >= from_dt.unwrap())
-                        && (to_dt.is_none() || date_settled <= to_dt.unwrap())
+                    if (from_date.is_none() || date_settled >= from_date.unwrap())
+                        && (to_date.is_none() || date_settled <= to_date.unwrap())
                     {
                         let kind = analysis.kind.into_int();
                         trackers

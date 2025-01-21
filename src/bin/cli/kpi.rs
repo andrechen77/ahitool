@@ -5,12 +5,12 @@ use ahitool::{
         google_sheets::{self, SheetNickname},
         job_nimbus,
     },
+    date_range::DateRange,
     jobs::Job,
     tools,
     utils::FileBacked,
 };
 use anyhow::{bail, Context};
-use chrono::{Datelike as _, NaiveDate, NaiveDateTime, NaiveTime, TimeZone as _, Utc};
 use clap::CommandFactory as _;
 use tracing::{info, warn};
 
@@ -167,45 +167,14 @@ pub fn main(args: Args) -> anyhow::Result<()> {
     };
 
     // parse the date range
-    let from_date = match from_date.as_str() {
-        "forever" => None,
-        "ytd" => Some(
-            Utc.from_utc_datetime(&NaiveDateTime::new(
-                NaiveDate::from_ymd_opt(Utc::now().year(), 1, 1)
-                    .expect("Jan 1 should always be valid in the current year."),
-                NaiveTime::MIN,
-            )),
-        ),
-        "today" => Some(Utc::now()),
-        date_string => {
-            let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
-                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
-            if let Ok(date) = date {
-                Some(date)
-            } else {
-                let err = CliArgs::command().error(
-                    clap::error::ErrorKind::ArgumentConflict,
-                    "Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'",
-                );
-                bail!(err);
-            }
-        }
-    };
-    let to_date = match to_date.as_str() {
-        "forever" => None,
-        "today" => Some(Utc::now()),
-        date_string => {
-            let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
-                .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
-            if let Ok(date) = date {
-                Some(date)
-            } else {
-                let err = CliArgs::command().error(
-                    clap::error::ErrorKind::ArgumentConflict,
-                    "Invalid date format. Use 'forever', 'ytd', 'today', or '%Y-%m-%d'",
-                );
-                bail!(err);
-            }
+    let date_range = match DateRange::from_strs(&from_date, &to_date) {
+        Ok(date_range) => date_range,
+        Err(e) => {
+            let err = CliArgs::command().error(
+                clap::error::ErrorKind::ArgumentConflict,
+                format!("Invalid date range: {}", e),
+            );
+            bail!(err);
         }
     };
 
@@ -214,7 +183,7 @@ pub fn main(args: Args) -> anyhow::Result<()> {
         job_nimbus::get_all_jobs_from_job_nimbus(&jn_api_key, filter.as_deref())?
             .map(|job| Arc::new(job))
             .collect();
-    let kpi_result = tools::kpi::calculate_kpi(jobs, (from_date, to_date));
+    let kpi_result = tools::kpi::calculate_kpi(jobs, date_range);
 
     // output the results
     use tools::kpi::output;

@@ -1,6 +1,7 @@
 use std::{sync::Arc, thread};
 
 use ahitool::{
+    date_range::DateRange,
     tools::{
         self,
         kpi::{JobTrackerStats, KpiData, KpiSubject},
@@ -84,7 +85,8 @@ impl KpiPage {
     fn start_calculate(&mut self, jn_data: Arc<JobNimbusData>) {
         let kpi_data_tx = self.kpi_data.start_fetch();
         thread::spawn(move || {
-            let kpi_data = tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), (None, None));
+            let kpi_data =
+                tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), DateRange::ALL_TIME);
             let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
         });
     }
