@@ -127,10 +127,11 @@ pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Resu
     Ok(())
 }
 
+/// Returns the id of the spreadsheet written to.
 pub fn generate_report_google_sheets(
     results: &AccRecvableData,
     spreadsheet_id: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<String> {
     fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
         RowData {
             values: cells
@@ -182,18 +183,15 @@ pub fn generate_report_google_sheets(
         ..Default::default()
     };
 
-    let url = google_sheets::run_with_credentials(|token| {
+    let (id, url) = google_sheets::run_with_credentials(|token| {
         let spreadsheet = spreadsheet.clone();
         if let Some(spreadsheet_id) = spreadsheet_id {
             google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet)
+                .map(|url| (spreadsheet_id.to_string(), url))
         } else {
-            google_sheets::create_spreadsheet(
-                &token,
-                google_sheets::SheetNickname::AccReceivable,
-                spreadsheet,
-            )
+            google_sheets::create_spreadsheet(&token, spreadsheet)
         }
     })?;
     utils::open_url(url.as_str());
-    Ok(())
+    Ok(id)
 }

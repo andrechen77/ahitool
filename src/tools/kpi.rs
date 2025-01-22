@@ -542,10 +542,11 @@ pub mod output {
         Ok(())
     }
 
+    /// Returns the id of the spreadsheet written to.
     pub fn generate_report_google_sheets(
         kpi_data: &KpiData,
         spreadsheet_id: Option<&str>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<String> {
         fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
             RowData {
                 values: cells
@@ -641,20 +642,17 @@ pub mod output {
             ..Default::default()
         };
 
-        let url = google_sheets::run_with_credentials(|token| {
+        let (id, url) = google_sheets::run_with_credentials(|token| {
             let spreadsheet = spreadsheet.clone();
             if let Some(spreadsheet_id) = spreadsheet_id {
                 google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet)
+                    .map(|url| (spreadsheet_id.to_owned(), url))
             } else {
-                google_sheets::create_spreadsheet(
-                    &token,
-                    google_sheets::SheetNickname::Kpi,
-                    spreadsheet,
-                )
+                google_sheets::create_spreadsheet(&token, spreadsheet)
             }
         })?;
         utils::open_url(url.as_str());
-        Ok(())
+        Ok(id)
     }
 
     pub fn into_days(time: TimeDelta) -> f64 {

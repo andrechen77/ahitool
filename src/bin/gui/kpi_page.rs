@@ -23,7 +23,9 @@ pub struct KpiPage {
     /// The current value of the date range custom date fields.
     date_range_custom: (String, String),
     kpi_data: DataLoader<Option<Arc<KpiData>>>,
-    export_data: DataLoader<()>,
+    /// Tracks the progress of exporting the data to Google Sheets. The data
+    /// is the id of the successfully exported spreadsheet.
+    export_data: DataLoader<Option<String>>,
 }
 
 impl KpiPage {
@@ -34,7 +36,7 @@ impl KpiPage {
             date_range_option: Default::default(),
             date_range_custom: Default::default(),
             kpi_data: DataLoader::new(None),
-            export_data: DataLoader::new(()),
+            export_data: DataLoader::new(None),
         }
     }
 
@@ -121,7 +123,11 @@ impl KpiPage {
             ui.heading("Export to Google Sheets");
             ui.horizontal(|ui| {
                 ui.label("Spreadsheet ID (empty to create):");
-                ui.text_edit_singleline(self.spreadsheet_id.get_mut());
+                let spreadsheet_id = self.spreadsheet_id.get_mut();
+                if let Some(new_spreadsheet_id) = self.export_data.get_mut().take() {
+                    *spreadsheet_id = new_spreadsheet_id;
+                }
+                ui.text_edit_singleline(spreadsheet_id);
             });
             ui.horizontal(|ui| {
                 let kpi_data = self.kpi_data.get_mut();
@@ -185,13 +191,15 @@ impl KpiPage {
     ) {
         let export_complete_tx = self.export_data.start_fetch();
         thread::spawn(move || {
-            if let Err(err) = tools::kpi::output::generate_report_google_sheets(
+            let new_spreadsheet_id = tools::kpi::output::generate_report_google_sheets(
                 &kpi_data,
                 spreadsheet_id.as_deref(),
-            ) {
+            )
+            .inspect_err(|err| {
                 warn!("Error exporting to Google Sheets: {}", err);
-            }
-            let _ = export_complete_tx.send(());
+            })
+            .ok();
+            let _ = export_complete_tx.send(new_spreadsheet_id);
         });
     }
 

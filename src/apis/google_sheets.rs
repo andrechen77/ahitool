@@ -1,11 +1,7 @@
 mod oauth;
 pub mod spreadsheet;
 
-use std::borrow::Cow;
 use std::collections::HashSet;
-
-use std::io::Cursor;
-use std::path::Path;
 
 use anyhow::anyhow;
 use http::{header::AUTHORIZATION, StatusCode};
@@ -14,56 +10,24 @@ pub use oauth::Token;
 use oauth::TryWithCredentialsError;
 use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use serde::Serialize;
 use serde_json::json;
 use spreadsheet::update::Request;
 use spreadsheet::GridCoordinate;
 use spreadsheet::SheetProperties;
 use spreadsheet::Spreadsheet;
 use std::collections::HashMap;
-use std::fmt;
-use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
 
 const ENDPOINT_SPREADSHEETS: &str = "https://sheets.googleapis.com/v4/spreadsheets";
-const KNOWN_SHEETS_FILE: &str = "google_sheets.json";
 
-/// Searches the known sheets file for an existing spreadsheet with the
-/// specified key. Updates that spreadsheet with the specified data, or creates
-/// a new spreadsheet in the user's Google Drive if it doesn't exist. Returns
-/// the URL of the Google Sheet.
-pub fn create_or_write_spreadsheet(
-    creds: &Token,
-    nickname: SheetNickname,
-    spreadsheet: Spreadsheet,
-) -> Result<String, TryWithCredentialsError> {
-    let known_sheet = match read_known_sheets_file(nickname) {
-        Err(e) => {
-            warn!("Failed to read known sheets file: {}", e);
-            None
-        }
-        Ok(None) => None,
-        Ok(Some(spreadsheet_id)) => Some(spreadsheet_id),
-    };
-    if let Some(spreadsheet_id) = known_sheet {
-        info!("Found existing sheet with ID {}", spreadsheet_id);
-        Ok(update_spreadsheet(creds, &spreadsheet_id, spreadsheet)?)
-    } else {
-        info!("No existing spreadsheet found, creating a new one");
-        Ok(create_spreadsheet(creds, nickname, spreadsheet)?)
-    }
-}
-
-/// Creates the specified spreadsheet in the user's Google Drive. Saves the
-/// created spreadsheet ID under the specified nickname in the known sheets file
-/// and return the URL of the created sheet.
+/// Creates the specified spreadsheet in the user's Google Drive. Return the id
+/// and URL of the created sheet.
 pub fn create_spreadsheet(
     creds: &Token,
-    nickname: SheetNickname,
     spreadsheet: Spreadsheet,
-) -> Result<String, TryWithCredentialsError> {
+) -> Result<(String, String), TryWithCredentialsError> {
     trace!("Sending request to create sheet");
     let response = ureq::post(ENDPOINT_SPREADSHEETS)
         .set(AUTHORIZATION.as_str(), format!("Bearer {}", creds.access_token().secret()).as_str())
@@ -94,21 +58,11 @@ pub fn create_spreadsheet(
     let ApiResponse { spreadsheet_id, spreadsheet_url } =
         successful_response.into_json().map_err(anyhow::Error::from)?;
 
-    debug!(
-        "Saving the spreadsheet under the nickname {}",
-        serde_json::to_string(&nickname)
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("error serializing nickname")
-    );
-    if let Err(e) = update_known_sheets_file(nickname, &spreadsheet_id) {
-        warn!("Failed to update known sheets file: {}", e);
-    };
-
     info!("Created Google Sheet at {}", spreadsheet_url);
-    Ok(spreadsheet_url)
+    Ok((spreadsheet_id, spreadsheet_url))
 }
 
+/// Updates the specified spreadsheet in the user's Google Drive. Return the URL of the created sheet.
 pub fn update_spreadsheet(
     creds: &Token,
     spreadsheet_id: &str,
@@ -279,73 +233,4 @@ pub fn update_spreadsheet(
     };
     info!("Updated Google Sheet at {}", url);
     Ok(url)
-}
-
-/// A HashMap of known sheets, where the key is some string, and the value is
-/// the spreadsheet ID.
-type KnownSheets<'a> = HashMap<SheetNickname, Cow<'a, str>>;
-
-pub fn update_known_sheets_file(
-    nickname: SheetNickname,
-    spreadsheet_id: &str,
-) -> std::io::Result<()> {
-    let path = Path::new(KNOWN_SHEETS_FILE);
-
-    // deserialize the existing known sheets
-    let mut known_sheets: KnownSheets = if let Ok(file_contents) = std::fs::read(path) {
-        match serde_json::from_reader(Cursor::new(file_contents)) {
-            Ok(sheets) => sheets,
-            Err(e) => {
-                warn!("failed to deserialize known sheets file: {}", e);
-                HashMap::new()
-            }
-        }
-    } else {
-        HashMap::new()
-    };
-
-    // insert the new key-value pair
-    known_sheets.insert(nickname, spreadsheet_id.into());
-
-    // Serialize the updated known sheets back to the file
-    let mut buffer = Vec::new();
-    serde_json::to_writer(&mut buffer, &known_sheets)?;
-    std::fs::write(path, &buffer)?;
-
-    info!("Updated known sheets file with new sheet ID for {}", nickname);
-
-    Ok(())
-}
-
-/// Reads the known sheets file and returns the value associated with the
-/// specified nickname.
-pub fn read_known_sheets_file(nickname: SheetNickname) -> std::io::Result<Option<String>> {
-    let file_contents = match std::fs::read(KNOWN_SHEETS_FILE) {
-        Ok(file_contents) => file_contents,
-        Err(e) => {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                warn!("Failed to open known sheets file: {}", e);
-            }
-            return Ok(None);
-        }
-    };
-    let mut known_sheets: KnownSheets = serde_json::from_reader(Cursor::new(file_contents))?;
-    info!("Read ID of existing Google Sheet for {}", nickname);
-    Ok(known_sheets.remove(&nickname).map(Cow::into_owned))
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum SheetNickname {
-    AccReceivable,
-    Kpi,
-}
-
-impl fmt::Display for SheetNickname {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let nickname_str = match self {
-            SheetNickname::AccReceivable => "AccReceivable",
-            SheetNickname::Kpi => "Kpi",
-        };
-        write!(f, "{}", nickname_str)
-    }
 }

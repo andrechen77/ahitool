@@ -14,12 +14,14 @@ use crate::{
 pub struct ArPage {
     pub spreadsheet_id: FileBacked<String>,
     ar_data: DataLoader<Option<Arc<AccRecvableData>>>,
-    export_data: DataLoader<()>,
+    /// Tracks the progress of exporting the data to Google Sheets. The data
+    /// is the id of the successfully exported spreadsheet.
+    export_data: DataLoader<Option<String>>,
 }
 
 impl ArPage {
     pub fn new(spreadsheet_id: FileBacked<String>) -> Self {
-        Self { spreadsheet_id, ar_data: DataLoader::new(None), export_data: DataLoader::new(()) }
+        Self { spreadsheet_id, ar_data: DataLoader::new(None), export_data: DataLoader::new(None) }
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
@@ -47,7 +49,11 @@ impl ArPage {
             ui.heading("Export to Google Sheets");
             ui.horizontal(|ui| {
                 ui.label("Spreadsheet ID (empty to create):");
-                ui.text_edit_singleline(self.spreadsheet_id.get_mut());
+                let spreadsheet_id = self.spreadsheet_id.get_mut();
+                if let Some(new_spreadsheet_id) = self.export_data.get_mut().take() {
+                    *spreadsheet_id = new_spreadsheet_id;
+                }
+                ui.text_edit_singleline(spreadsheet_id);
             });
             ui.horizontal(|ui| {
                 let ar_data = self.ar_data.get_mut();
@@ -89,13 +95,13 @@ impl ArPage {
     ) {
         let export_data_tx = self.export_data.start_fetch();
         thread::spawn(move || {
-            if let Err(e) = tools::acc_receivable::generate_report_google_sheets(
+            let new_spreadsheet_id = tools::acc_receivable::generate_report_google_sheets(
                 &ar_data,
                 spreadsheet_id.as_deref(),
-            ) {
-                warn!("Error exporting to Google Sheets: {}", e);
-            }
-            let _ = export_data_tx.send(());
+            )
+            .inspect_err(|e| warn!("Error exporting to Google Sheets: {}", e))
+            .ok();
+            let _ = export_data_tx.send(new_spreadsheet_id);
         });
     }
 
