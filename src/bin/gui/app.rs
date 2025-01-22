@@ -2,7 +2,7 @@ use ahitool::utils::FileBacked;
 
 use crate::{
     ar_page::ArPage, job_nimbus_client::JobNimbusClient, job_viewer::JobNimbusViewer,
-    kpi_page::KpiPage,
+    kpi_page::KpiPage, update_page::UpdatePage,
 };
 
 pub struct MainApp {
@@ -11,6 +11,7 @@ pub struct MainApp {
     pub job_nimbus_viewer: JobNimbusViewer,
     pub kpi_page_state: KpiPage,
     pub ar_page_state: ArPage,
+    pub update_page_state: UpdatePage,
 }
 
 #[derive(Default, PartialEq, Eq, Hash)]
@@ -20,6 +21,7 @@ pub enum AhitoolTool {
     JobViewer,
     Kpi,
     Ar,
+    SelfUpdate,
 }
 
 impl MainApp {
@@ -38,6 +40,7 @@ impl MainApp {
                 || String::new(),
             )),
             job_nimbus_viewer: JobNimbusViewer::new(),
+            update_page_state: UpdatePage::new(),
             current_tool: AhitoolTool::None,
         }
     }
@@ -49,6 +52,7 @@ impl MainApp {
             AhitoolTool::JobViewer => "Job Viewer",
             AhitoolTool::Kpi => "Key Performance Indicators",
             AhitoolTool::Ar => "Accounts Receivable",
+            AhitoolTool::SelfUpdate => "Self Update",
         });
         let popup_id = ui.make_persistent_id("tool_chooser");
         if heading.clicked() {
@@ -71,6 +75,9 @@ impl MainApp {
                 if ui.button("Job Viewer").clicked() {
                     self.current_tool = AhitoolTool::JobViewer;
                 }
+                if ui.button("Self Update").clicked() {
+                    self.current_tool = AhitoolTool::SelfUpdate;
+                }
             },
         );
 
@@ -84,6 +91,7 @@ impl MainApp {
             }
             AhitoolTool::Kpi => self.kpi_page_state.render(ui, &mut self.job_nimbus_client),
             AhitoolTool::Ar => self.ar_page_state.render(ui, &mut self.job_nimbus_client),
+            AhitoolTool::SelfUpdate => self.update_page_state.render(ui),
         }
     }
 

@@ -8,6 +8,7 @@ mod data_loader;
 mod job_nimbus_client;
 mod job_viewer;
 mod kpi_page;
+mod update_page;
 
 fn main() {
     // set up tracing
