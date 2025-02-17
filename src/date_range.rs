@@ -26,7 +26,7 @@ impl DateRange {
                 if let Ok(date) = date {
                     Some(date)
                 } else {
-                    bail!("Invalid date format \"{date_string}\". Use 'forever', 'ytd', 'today', or '%Y-%m-%d'");
+                    bail!("invalid date format \"{date_string}\". Use 'forever', 'ytd', 'today', or '%Y-%m-%d'");
                 }
             }
         };
@@ -39,7 +39,7 @@ impl DateRange {
                 if let Ok(date) = date {
                     Some(date)
                 } else {
-                    bail!("Invalid date format \"{date_string}\". Use 'forever', 'ytd', 'today', or '%Y-%m-%d'");
+                    bail!("invalid date format \"{date_string}\". Use 'forever', 'ytd', 'today', or '%Y-%m-%d'");
                 }
             }
         };

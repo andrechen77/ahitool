@@ -107,7 +107,7 @@ impl ArPage {
 
     pub fn on_exit(&mut self) {
         if let Err(e) = self.spreadsheet_id.write_back() {
-            warn!("error writing back spreadsheet ID: {}", e);
+            warn!("Error writing back spreadsheet ID: {}", e);
         }
     }
 }

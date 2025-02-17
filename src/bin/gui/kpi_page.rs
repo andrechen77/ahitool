@@ -52,22 +52,17 @@ impl KpiPage {
                         ui.selectable_value(
                             &mut self.date_range_option.0,
                             DateRangeOption::Forever,
-                            "forever",
+                            "Forever",
                         );
                         ui.selectable_value(
                             &mut self.date_range_option.0,
                             DateRangeOption::Ytd,
-                            "ytd",
-                        );
-                        ui.selectable_value(
-                            &mut self.date_range_option.0,
-                            DateRangeOption::Today,
-                            "today",
+                            "Start-of-year",
                         );
                         ui.selectable_value(
                             &mut self.date_range_option.0,
                             DateRangeOption::Custom,
-                            "custom",
+                            "Custom",
                         );
                     });
                 if self.date_range_option.0 == DateRangeOption::Custom {
@@ -81,17 +76,12 @@ impl KpiPage {
                         ui.selectable_value(
                             &mut self.date_range_option.1,
                             DateRangeOption::Forever,
-                            "forever",
-                        );
-                        ui.selectable_value(
-                            &mut self.date_range_option.1,
-                            DateRangeOption::Today,
-                            "today",
+                            "Forever",
                         );
                         ui.selectable_value(
                             &mut self.date_range_option.1,
                             DateRangeOption::Custom,
-                            "custom",
+                            "Custom",
                         );
                     });
                 if self.date_range_option.1 == DateRangeOption::Custom {
@@ -285,6 +275,7 @@ enum DateRangeOption {
     #[default]
     Forever,
     Ytd,
+    #[allow(dead_code)] // keep the option of using this open
     Today,
     Custom,
 }

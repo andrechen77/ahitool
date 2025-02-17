@@ -57,7 +57,7 @@ where
     let expired_token = match get_cached_token(cache_file) {
         Some((cached_token, false)) => {
             // attempt to run the function with the cached token
-            trace!("using cached token to perform operation");
+            trace!("Using cached token to perform operation");
             match function(&cached_token.token) {
                 Ok(result) => {
                     // the function worked the first time. since we did not
@@ -65,7 +65,7 @@ where
                     return Ok(result);
                 }
                 Err(TryWithCredentialsError::Unauthorized(e)) => {
-                    debug!("cached token is invalid, as indicated by error: {}", e);
+                    debug!("Cached token is invalid, as indicated by error: {}", e);
                     // even though `get_cached_token` returned `false`, the
                     // token might still be expired (either expired in between
                     // when we last checked till now, or it didn't have an
@@ -81,7 +81,7 @@ where
         }
         Some((cached_token, true)) => {
             // the token is known to be expired
-            debug!("cached token is expired");
+            debug!("Cached token is expired");
             Some(cached_token)
         }
         None => None,
@@ -90,36 +90,36 @@ where
     // attempt to refresh and run again
     'refresh: {
         let Some(expired_token) = expired_token else {
-            debug!("no cached token to refresh");
+            debug!("No cached token to refresh");
             break 'refresh;
         };
         let Some(refresh_token) = expired_token.token.refresh_token() else {
-            debug!("cached token does not have a refresh token");
+            debug!("Cached token does not have a refresh token");
             break 'refresh;
         };
-        trace!("found refresh token. attempting to refresh");
+        trace!("Found refresh token. attempting to refresh");
         let refreshed_token = match refresh_credentials(refresh_token) {
             Ok(refreshed_token) => {
-                debug!("successfully refreshed token");
+                debug!("Successfully refreshed token");
                 refreshed_token
             }
             Err(e) => {
-                warn!("failed to refresh OAuth credentials: {}", e);
+                warn!("Failed to refresh OAuth credentials: {}", e);
                 break 'refresh;
             }
         };
-        trace!("performing operation with refreshed token");
+        trace!("Performing operation with refreshed token");
         match function(&refreshed_token.token) {
             Ok(result) => {
                 // the function worked with a refreshed token. cache this
                 // refreshed token
-                debug!("caching refreshed token to {}", cache_file.display());
+                debug!("Caching refreshed token to {}", cache_file.display());
                 let writer = BufWriter::new(File::create(cache_file)?);
                 serde_json::to_writer(writer, &refreshed_token)?;
                 return Ok(result);
             }
             Err(TryWithCredentialsError::Unauthorized(e)) => {
-                debug!("refreshed token is invalid, as indicated by error: {}", e);
+                debug!("Refreshed token is invalid, as indicated by error: {}", e);
             }
             Err(TryWithCredentialsError::Other(e)) => {
                 // the problem was not with the credentials, so just return
@@ -131,18 +131,18 @@ where
 
     // getting to this point means the refreshed token did not work. attempt
     // to get totally fresh credentials and run again
-    trace!("attempting to get totally fresh credentials");
+    trace!("Attempting to get totally fresh credentials");
     let fresh_token = match get_fresh_credentials() {
         Ok(fresh_token) => fresh_token,
         Err(e) => {
-            warn!("failed to get fresh OAuth credentials: {}", e);
+            warn!("Failed to get fresh OAuth credentials: {}", e);
             return Err(e);
         }
     };
     let err = match function(&fresh_token.token) {
         Ok(result) => {
             // the function worked with a fresh token
-            debug!("caching fresh token to {}", cache_file.display());
+            debug!("Caching fresh token to {}", cache_file.display());
             let writer = BufWriter::new(File::create(cache_file)?);
             serde_json::to_writer(writer, &fresh_token)?;
             return Ok(result);
@@ -165,7 +165,7 @@ where
 fn get_cached_token(cache_file: &Path) -> Option<(TokenWithExpiration, bool)> {
     match cache_file.try_exists() {
         Ok(false) => {
-            debug!("cache file does not exist");
+            debug!("Cache file does not exist");
             return None;
         }
         Err(e) => {
@@ -173,7 +173,7 @@ fn get_cached_token(cache_file: &Path) -> Option<(TokenWithExpiration, bool)> {
             return None;
         }
         Ok(true) => {
-            trace!("found cache file");
+            trace!("Found cache file");
         }
     }
 
@@ -181,7 +181,7 @@ fn get_cached_token(cache_file: &Path) -> Option<(TokenWithExpiration, bool)> {
     let file = match File::open(cache_file) {
         Ok(file) => file,
         Err(e) => {
-            warn!("failed to open cache file: {}", e);
+            warn!("Failed to open cache file: {}", e);
             // if we can't open the file even though `try_exists` returned
             // `Ok(true)`, it's probably because the file was deleted between
             // when we checked and when we we tried to open it, so we should
@@ -194,17 +194,17 @@ fn get_cached_token(cache_file: &Path) -> Option<(TokenWithExpiration, bool)> {
         serde_json::from_reader(BufReader::new(file));
     match cached_token {
         Ok(cached_token) => {
-            debug!("successfully deserialized cached token");
+            debug!("Successfully deserialized cached token");
             if let Some(duration) = cached_token.token.expires_in() {
                 let is_expired = cached_token.time_obtained + duration <= Utc::now();
                 Some((cached_token, is_expired))
             } else {
-                debug!("the token did not have an expiration time; assuming it is valid");
+                debug!("The token did not have an expiration time; assuming it is valid");
                 Some((cached_token, false))
             }
         }
         Err(e) => {
-            warn!("failed to deserialize cached token: {}", e);
+            warn!("Failed to deserialize cached token: {}", e);
             None
         }
     }
@@ -263,7 +263,7 @@ fn listen_for_code(tcp_listener: TcpListener, csrf_token: CsrfToken) -> anyhow::
         let path_and_query = req.url();
         let url = format!("http://localhost{}", path_and_query);
         let Ok(url) = Url::parse(&url) else {
-            warn!("failed to parse path to requested resource: {}", path_and_query);
+            warn!("Failed to parse path to requested resource: {}", path_and_query);
             continue 'request_loop;
         };
 
@@ -296,7 +296,7 @@ fn listen_for_code(tcp_listener: TcpListener, csrf_token: CsrfToken) -> anyhow::
                     code
                 } else {
                     if let Err(e) = req.respond(Response::from_string("Authorization code not found in redirect. Try again or contact the developer.")) {
-                        warn!("failed to respond to request: {}", e);
+                        warn!("Failed to respond to request: {}", e);
                     }
                     continue 'request_loop;
                 }
@@ -305,7 +305,7 @@ fn listen_for_code(tcp_listener: TcpListener, csrf_token: CsrfToken) -> anyhow::
                 // rejected
                 warn!("Authorization redirect did not include a valid state. This may be an indication of an attempted attack.");
                 if let Err(e) = req.respond(Response::from_string("Authorization code rejected due to invalid state. Try again or contact the developer.")) {
-                    warn!("failed to respond to request: {}", e);
+                    warn!("Failed to respond to request: {}", e);
                 }
                 continue 'request_loop;
             }

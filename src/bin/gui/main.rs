@@ -20,7 +20,7 @@ fn main() {
     let result =
         eframe::run_native("AHItool", Default::default(), Box::new(|_cc| Ok(Box::new(app_state))));
     if let Err(e) = result {
-        warn!("error in UI thread: {}", e);
+        warn!("Error in UI thread: {}", e);
     }
 }
 

@@ -56,7 +56,7 @@ impl MainApp {
                 AhitoolTool::Ar => "Accounts Receivable",
                 AhitoolTool::SelfUpdate => "Self Update",
             });
-            if ui.button("change tool").clicked() {
+            if ui.button("Change tool").clicked() {
                 ui.memory_mut(|mem| mem.toggle_popup(popup_id));
             }
         });

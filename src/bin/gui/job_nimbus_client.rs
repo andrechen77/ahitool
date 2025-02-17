@@ -81,11 +81,11 @@ impl JobNimbusClient {
                     Some(Arc::new(JobNimbusData { fetched: now, jobs }))
                 }
                 Err(e) => {
-                    warn!("error fetching jobs: {}", e);
+                    warn!("Error fetching jobs: {}", e);
                     None
                 }
             };
-            trace!("fetch complete; sending results back to UI component");
+            trace!("Fetch complete; sending results back to UI component");
             let _ = data_tx.send(answer);
         });
     }
@@ -96,7 +96,7 @@ impl JobNimbusClient {
 
     pub fn on_exit(&mut self) {
         if let Err(e) = self.api_key.write_back() {
-            warn!("error writing back JobNimbus API key: {}", e);
+            warn!("Error writing back JobNimbus API key: {}", e);
         }
     }
 }

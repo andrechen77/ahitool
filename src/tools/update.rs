@@ -31,7 +31,7 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
         ureq::get(&api_url).set(USER_AGENT.as_str(), USER_AGENT_VALUE).call()?.into_json()?;
 
     let version_tag =
-        response["tag_name"].as_str().ok_or(anyhow::anyhow!("No tag_name found in release"))?;
+        response["tag_name"].as_str().ok_or(anyhow::anyhow!("no tag_name found in release"))?;
     info!("Latest version is {}", version_tag);
 
     let asset_url = response["assets"]
@@ -46,7 +46,7 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
                 None
             }
         })
-        .ok_or(anyhow::anyhow!("No suitable asset found for this platform"))?;
+        .ok_or(anyhow::anyhow!("no suitable asset found for this platform"))?;
 
     info!("Downloading asset from {}", asset_url);
     let response = ureq::get(asset_url).set(USER_AGENT.as_str(), USER_AGENT_VALUE).call()?;

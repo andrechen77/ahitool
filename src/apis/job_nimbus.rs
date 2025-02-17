@@ -37,22 +37,22 @@ pub fn get_all_jobs_from_job_nimbus(
         results: Vec<Value>,
     }
 
-    info!("getting all jobs from JobNimbus");
+    info!("Getting all jobs from JobNimbus");
 
     // make a request to find out the number of jobs
     let response = request_from_job_nimbus(api_key, 1, filter)?;
     let response: ApiResponse = response.into_json()?;
     let count = response.count as usize;
 
-    info!("detected {} jobs in JobNimbus", count);
+    info!("Detected {} jobs in JobNimbus", count);
 
     // make a request to actually get those jobs
     let response = request_from_job_nimbus(api_key, count, filter)?;
     let response: ApiResponse = response.into_json()?;
-    info!("recieved {} jobs from JobNimbus", response.count);
+    info!("Recieved {} jobs from JobNimbus", response.count);
     assert_eq!(response.count as usize, count);
 
     Ok(response.results.into_iter().filter_map(|v| {
-        Job::try_from(v).inspect_err(|err| warn!("error deserializing job: {}", err)).ok()
+        Job::try_from(v).inspect_err(|err| warn!("Error deserializing job: {}", err)).ok()
     }))
 }

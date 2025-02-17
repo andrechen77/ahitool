@@ -82,13 +82,13 @@ pub fn update_spreadsheet(
             Ok(response) => response,
             Err(ureq::Error::Status(status_code, _)) if status_code == StatusCode::UNAUTHORIZED => {
                 return Err(TryWithCredentialsError::Unauthorized(anyhow!(
-                    "Request to get current sheet was unauthorized with status code: {}",
+                    "request to get current sheet was unauthorized with status code: {}",
                     status_code
                 )));
             }
             Err(err) => {
                 return Err(TryWithCredentialsError::Other(anyhow!(
-                    "Request to get current sheet failed: {}",
+                    "request to get current sheet failed: {}",
                     err
                 )));
             }
@@ -130,7 +130,7 @@ pub fn update_spreadsheet(
     if let Some(sheets) = spreadsheet.sheets {
         for sheet in sheets {
             if sheet.properties.sheet_id.is_some() {
-                warn!("sheet ID is ignored when updating a spreadsheet; use the title instead");
+                warn!("Sheet ID is ignored when updating a spreadsheet; use the title instead");
             }
             let sheet_id = 'sheet_id: {
                 if let Some(title) = &sheet.properties.title {
@@ -197,13 +197,13 @@ pub fn update_spreadsheet(
         Ok(response) => response,
         Err(ureq::Error::Status(status_code, _)) if status_code == StatusCode::UNAUTHORIZED => {
             return Err(TryWithCredentialsError::Unauthorized(anyhow!(
-                "Request to update spreadsheet was unauthorized with status code: {}",
+                "request to update spreadsheet was unauthorized with status code: {}",
                 status_code
             )));
         }
         Err(err) => {
             return Err(TryWithCredentialsError::Other(anyhow!(
-                "Request to update spreadsheet failed: {}",
+                "request to update spreadsheet failed: {}",
                 err
             )));
         }

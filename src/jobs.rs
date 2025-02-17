@@ -229,15 +229,15 @@ impl JobAnalysis {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum JobAnalysisError {
-    #[error("This job has signed a contingency form, but is not an insurance job.")]
+    #[error("this job has signed a contingency form, but is not an insurance job.")]
     ContingencyWithoutInsurance,
-    #[error("This job's insurance checkbox isn't checked, but it has an insurance claim number.")]
+    #[error("this job's insurance checkbox isn't checked, but it has an insurance claim number.")]
     InconsistentInsuranceInfo,
-    #[error("The date for {} does not follow previous dates.", .0.map(|stage| stage.to_string()).unwrap_or("Job Lost".to_owned()))]
+    #[error("the date for {} does not follow previous dates.", .0.map(|stage| stage.to_string()).unwrap_or("Job Lost".to_owned()))]
     OutOfOrderDates(Option<Milestone>),
-    #[error("This job has skipped date(s) prior to the milestone {0:?}.")]
+    #[error("this job has skipped date(s) prior to the milestone {0:?}.")]
     SkippedDates(Milestone),
-    #[error("This job has a loss date, but it has already been installed/contracted.")]
+    #[error("this job has a loss date, but it has already been installed/contracted.")]
     InvalidLoss,
 }
 
@@ -345,13 +345,13 @@ pub fn analyze_job(job: Arc<Job>) -> (AnalyzedJob, Vec<JobAnalysisError>) {
 
 #[derive(Error, Debug)]
 pub enum JobFromJsonError {
-    #[error("Expected a JSON object, but got {0:?}")]
+    #[error("expected a JSON object, but got {0:?}")]
     NotJsonObject(serde_json::Value),
-    #[error("Expected a '{KEY_JNID}' field in the JSON object")]
+    #[error("expected a '{KEY_JNID}' field in the JSON object")]
     JnidNotFound(serde_json::Map<String, serde_json::Value>),
-    #[error("Expected a '{KEY_STATUS_NAME}' field in the JSON object")]
+    #[error("expected a '{KEY_STATUS_NAME}' field in the JSON object")]
     StatusNotFound(serde_json::Map<String, serde_json::Value>),
-    #[error("Expected a '{KEY_STATUS_MOD_TIME}' field in the JSON object")]
+    #[error("expected a '{KEY_STATUS_MOD_TIME}' field in the JSON object")]
     StatusModTimeNotFound(serde_json::Map<String, serde_json::Value>),
 }
 

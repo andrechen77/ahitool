@@ -38,7 +38,7 @@ pub fn lookup(api_key: &str, address: &str) -> Result<LatLng, LookupError> {
         }
         Err(ureq::Error::Status(status_code, _)) => {
             return Err(LookupError::Other(anyhow!(
-                "Request failed with status code: {}",
+                "request failed with status code: {}",
                 status_code
             )));
         }
@@ -54,7 +54,7 @@ pub fn lookup(api_key: &str, address: &str) -> Result<LatLng, LookupError> {
 
     let response: serde_json::Value =
         successful_response.into_json().map_err(anyhow::Error::from)?;
-    trace!("received response: {}", response);
+    trace!("Received response: {}", response);
     let response: ApiResponse = serde_json::from_value(response).map_err(anyhow::Error::from)?;
 
     if let Some(place) = response.places.into_iter().next() {
