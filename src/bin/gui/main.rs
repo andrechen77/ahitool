@@ -16,9 +16,13 @@ fn main() {
 
     let app_state = MainApp::with_cached_storage();
 
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_icon(icon_data()),
+        ..Default::default()
+    };
+
     // run the UI on the main thread
-    let result =
-        eframe::run_native("AHItool", Default::default(), Box::new(|_cc| Ok(Box::new(app_state))));
+    let result = eframe::run_native("AHItool", options, Box::new(|_cc| Ok(Box::new(app_state))));
     if let Err(e) = result {
         warn!("Error in UI thread: {}", e);
     }
@@ -34,4 +38,13 @@ impl eframe::App for MainApp {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.on_exit();
     }
+}
+
+fn icon_data() -> egui::IconData {
+    /// FUTURE extract this automatically from the image
+    const WIDTH: u32 = 256;
+    const HEIGHT: u32 = 256;
+    const DATA: &[u8] = include_bytes!("icon.rgba8");
+
+    egui::IconData { width: WIDTH as _, height: HEIGHT as _, rgba: DATA.to_vec() }
 }
