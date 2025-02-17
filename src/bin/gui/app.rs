@@ -47,17 +47,20 @@ impl MainApp {
 
     pub fn render(&mut self, ui: &mut egui::Ui) {
         // heading to display and choose the current tool
-        let heading = ui.heading(match self.current_tool {
-            AhitoolTool::None => "Welcome to AHItool",
-            AhitoolTool::JobViewer => "Job Viewer",
-            AhitoolTool::Kpi => "Key Performance Indicators",
-            AhitoolTool::Ar => "Accounts Receivable",
-            AhitoolTool::SelfUpdate => "Self Update",
-        });
         let popup_id = ui.make_persistent_id("tool_chooser");
-        if heading.clicked() {
-            ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-        }
+        let heading = ui.horizontal(|ui| {
+            ui.heading(match self.current_tool {
+                AhitoolTool::None => "Welcome to AHItool",
+                AhitoolTool::JobViewer => "Job Viewer",
+                AhitoolTool::Kpi => "Key Performance Indicators",
+                AhitoolTool::Ar => "Accounts Receivable",
+                AhitoolTool::SelfUpdate => "Self Update",
+            });
+            if ui.button("change tool").clicked() {
+                ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+            }
+        });
+        let heading = heading.response;
         egui::popup_above_or_below_widget(
             ui,
             popup_id,
@@ -84,7 +87,7 @@ impl MainApp {
         // display the current tool
         match self.current_tool {
             AhitoolTool::None => {
-                ui.label("Click on the heading to choose a subtool.");
+                ui.label("Please choose a subtool.");
             }
             AhitoolTool::JobViewer => {
                 self.job_nimbus_viewer.render(ui, &mut self.job_nimbus_client)
