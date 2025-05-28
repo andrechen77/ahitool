@@ -33,8 +33,8 @@ impl KpiPage {
         Self {
             selected_rep: None,
             spreadsheet_id,
-            date_range_option: Default::default(),
-            date_range_custom: Default::default(),
+            date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
+            date_range_custom: (String::new(), String::new()),
             kpi_data: DataLoader::new(None),
             export_data: DataLoader::new(None),
         }
@@ -52,17 +52,17 @@ impl KpiPage {
                         ui.selectable_value(
                             &mut self.date_range_option.0,
                             DateRangeOption::Forever,
-                            "Forever",
+                            DateRangeOption::Forever.to_str(),
                         );
                         ui.selectable_value(
                             &mut self.date_range_option.0,
-                            DateRangeOption::Ytd,
-                            "Start-of-year",
+                            DateRangeOption::StartOfYear,
+                            DateRangeOption::StartOfYear.to_str(),
                         );
                         ui.selectable_value(
                             &mut self.date_range_option.0,
                             DateRangeOption::Custom,
-                            "Custom",
+                            DateRangeOption::Custom.to_str(),
                         );
                     });
                 if self.date_range_option.0 == DateRangeOption::Custom {
@@ -75,13 +75,13 @@ impl KpiPage {
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
                             &mut self.date_range_option.1,
-                            DateRangeOption::Forever,
-                            "Forever",
+                            DateRangeOption::Today,
+                            DateRangeOption::Today.to_str(),
                         );
                         ui.selectable_value(
                             &mut self.date_range_option.1,
                             DateRangeOption::Custom,
-                            "Custom",
+                            DateRangeOption::Custom.to_str(),
                         );
                     });
                 if self.date_range_option.1 == DateRangeOption::Custom {
@@ -160,16 +160,12 @@ impl KpiPage {
 
     fn get_date_range(&self) -> anyhow::Result<DateRange> {
         let from_text = match self.date_range_option.0 {
-            DateRangeOption::Forever => "forever",
-            DateRangeOption::Ytd => "ytd",
-            DateRangeOption::Today => "today",
             DateRangeOption::Custom => &self.date_range_custom.0,
+            preset => preset.to_str(),
         };
         let to_text = match self.date_range_option.1 {
-            DateRangeOption::Forever => "forever",
-            DateRangeOption::Ytd => "ytd",
-            DateRangeOption::Today => "today",
             DateRangeOption::Custom => &self.date_range_custom.1,
+            preset => preset.to_str(),
         };
         DateRange::from_strs(from_text, to_text)
     }
@@ -274,19 +270,18 @@ fn render_kpi_stats_table(ui: &mut egui::Ui, stats: &JobTrackerStats) {
 enum DateRangeOption {
     #[default]
     Forever,
-    Ytd,
-    #[allow(dead_code)] // keep the option of using this open
+    StartOfYear,
     Today,
     Custom,
 }
 
 impl DateRangeOption {
-    fn to_str(self) -> &'static str {
+    const fn to_str(self) -> &'static str {
         match self {
-            Self::Forever => "forever",
-            Self::Ytd => "ytd",
-            Self::Today => "today",
-            Self::Custom => "custom",
+            Self::Forever => "Forever",
+            Self::StartOfYear => "Start-of-year",
+            Self::Today => "Today",
+            Self::Custom => "Custom",
         }
     }
 }

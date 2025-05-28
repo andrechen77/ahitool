@@ -17,29 +17,30 @@ impl DateRange {
 
     pub fn from_strs(from_date: &str, to_date: &str) -> anyhow::Result<Self> {
         let from_date = match from_date {
-            "forever" => None,
-            "ytd" => Some(start_of_year()),
-            "today" => Some(Utc::now()),
+            "Forever" => None,
+            "Start-of-year" => Some(start_of_year()),
+            "Today" => Some(Utc::now()),
             date_string => {
                 let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
                     .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
                 if let Ok(date) = date {
                     Some(date)
                 } else {
-                    bail!("invalid date format \"{date_string}\". Use 'forever', 'ytd', 'today', or '%Y-%m-%d'");
+                    bail!("invalid date format \"{date_string}\". Use 'Forever', 'Start-of-year', 'Today', or '%Y-%m-%d'");
                 }
             }
         };
         let to_date = match to_date {
-            "forever" => None,
-            "today" => Some(Utc::now()),
+            "Forever" => None,
+            "Start-of-year" => Some(start_of_year()),
+            "Today" => Some(Utc::now()),
             date_string => {
                 let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
                     .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
                 if let Ok(date) = date {
                     Some(date)
                 } else {
-                    bail!("invalid date format \"{date_string}\". Use 'forever', 'ytd', 'today', or '%Y-%m-%d'");
+                    bail!("invalid date format \"{date_string}\". Use 'Forever', 'Start-of-year', 'Today', or '%Y-%m-%d'");
                 }
             }
         };
