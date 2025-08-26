@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     sync::{Arc, MutexGuard},
     thread,
 };
@@ -12,6 +13,7 @@ use crate::data_loader::DataLoader;
 pub struct JobNimbusData {
     pub fetched: DateTime<Utc>,
     pub jobs: Vec<Arc<Job>>,
+    pub lead_sources: HashSet<String>,
 }
 
 pub struct JobNimbusClient {
@@ -77,8 +79,10 @@ impl JobNimbusClient {
             let answer = match job_nimbus::get_all_jobs_from_job_nimbus(&api_key, None) {
                 Ok(jobs) => {
                     let now = Utc::now();
-                    let jobs = jobs.map(|job| Arc::new(job)).collect();
-                    Some(Arc::new(JobNimbusData { fetched: now, jobs }))
+                    let jobs: Vec<_> = jobs.map(|job| Arc::new(job)).collect();
+                    let lead_sources =
+                        jobs.iter().filter_map(|job| job.lead_source.clone()).collect();
+                    Some(Arc::new(JobNimbusData { fetched: now, jobs, lead_sources }))
                 }
                 Err(e) => {
                     warn!("Error fetching jobs: {}", e);

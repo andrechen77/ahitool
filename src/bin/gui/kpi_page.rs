@@ -22,6 +22,8 @@ pub struct KpiPage {
     date_range_option: (DateRangeOption, DateRangeOption),
     /// The current value of the date range custom date fields.
     date_range_custom: (String, String),
+    /// The current value of the lead source dropdown selector.
+    lead_source_option: Option<String>,
     kpi_data: DataLoader<Option<Arc<KpiData>>>,
     /// Tracks the progress of exporting the data to Google Sheets. The data
     /// is the id of the successfully exported spreadsheet.
@@ -35,6 +37,7 @@ impl KpiPage {
             spreadsheet_id,
             date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
             date_range_custom: (String::new(), String::new()),
+            lead_source_option: None,
             kpi_data: DataLoader::new(None),
             export_data: DataLoader::new(None),
         }
@@ -89,6 +92,19 @@ impl KpiPage {
                         ui.text_edit_singleline(&mut self.date_range_custom.1);
                     });
                 }
+
+                egui::ComboBox::from_label("Filter by lead source")
+                    .selected_text(self.lead_source_option.as_deref().unwrap_or("All sources"))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.lead_source_option, None, "All sources");
+                        for lead_source in &jn_data.lead_sources {
+                            ui.selectable_value(
+                                &mut self.lead_source_option,
+                                Some(lead_source.clone()),
+                                lead_source,
+                            );
+                        }
+                    });
 
                 if ui.button("Calculate KPIs").clicked() {
                     let jn_data = Arc::clone(jn_data);
@@ -152,12 +168,13 @@ impl KpiPage {
             }
         };
         let kpi_data_tx = self.kpi_data.start_fetch();
+        let lead_source_filter = self.lead_source_option.clone();
         thread::spawn(move || {
-            let kpi_data = tools::kpi::calculate_kpi(
-                jn_data.jobs.iter().cloned(),
-                date_range,
-                chrono::Local::now().to_utc(),
-            );
+            let jobs = jn_data.jobs.iter().cloned().filter(|job| {
+                lead_source_filter.is_none() || job.lead_source == lead_source_filter
+            });
+            let kpi_data =
+                tools::kpi::calculate_kpi(jobs, date_range, chrono::Local::now().to_utc());
             let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
         });
     }

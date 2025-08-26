@@ -18,6 +18,7 @@ const KEY_LOSS_DATE: &str = "Job Lost Date (Lost Status)";
 const KEY_AMOUNT_RECEIVABLE: &str = "approved_invoice_due";
 const KEY_STATUS_NAME: &str = "status_name";
 const KEY_STATUS_MOD_TIME: &str = "date_status_change";
+const KEY_LEAD_SOURCE: &str = "source_name";
 
 pub type Timestamp = DateTime<Utc>;
 pub type TimeDelta = chrono::TimeDelta;
@@ -159,6 +160,7 @@ pub struct Job {
     pub insurance_company_name: Option<String>,
     pub job_number: Option<String>,
     pub job_name: Option<String>,
+    pub lead_source: Option<String>,
     /// The amount receivable on this job, in cents.
     pub amt_receivable: i32,
 }
@@ -386,6 +388,7 @@ impl TryFrom<serde_json::Value> for Job {
         let insurance_claim_number = get_owned_nonempty(&map, KEY_INSURANCE_CLAIM_NUMBER);
         let job_number = get_owned_nonempty(&map, KEY_JOB_NUMBER);
         let job_name = get_owned_nonempty(&map, KEY_JOB_NAME);
+        let lead_source = get_owned_nonempty(&map, KEY_LEAD_SOURCE);
 
         let status: Status = if let Some(s) = map.get(KEY_STATUS_NAME).and_then(|v| v.as_str()) {
             s.into()
@@ -432,6 +435,7 @@ impl TryFrom<serde_json::Value> for Job {
             insurance_claim_number,
             job_number,
             job_name,
+            lead_source,
             milestone_dates: MilestoneDates {
                 appointment_date,
                 contingency_date,
@@ -473,6 +477,7 @@ mod test {
             insurance_company_name: if insurance { Some("Gekko".to_owned()) } else { None },
             job_number: None,
             job_name: None,
+            lead_source: None,
             milestone_dates: MilestoneDates {
                 appointment_date: date_1,
                 contingency_date: date_2,
@@ -690,6 +695,7 @@ mod test {
             insurance_company_name: Some("Gekko".to_owned()),
             job_number: None,
             job_name: None,
+            lead_source: None,
             milestone_dates: MilestoneDates {
                 appointment_date: Some(dt(1)),
                 contingency_date: None,
