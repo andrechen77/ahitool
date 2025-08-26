@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveTime, Utc};
 use std::{fmt::Display, ops::Index, sync::Arc};
 use thiserror::Error;
 use tracing::warn;
@@ -240,9 +240,9 @@ pub enum JobAnalysisError {
     ContingencyWithoutInsurance,
     #[error("this job's insurance checkbox isn't checked, but it has an insurance claim number.")]
     InconsistentInsuranceInfo,
-    #[error("the date for {} does not follow previous dates.", .0.map(|stage| stage.to_string()).unwrap_or("Job Lost".to_owned()))]
+    #[error("the date for {} is out of order.", .0.map(|stage| stage.to_string()).unwrap_or("Job Lost".to_owned()))]
     OutOfOrderDates(Option<Milestone>),
-    #[error("this job has skipped date(s) prior to the milestone {0:?}.")]
+    #[error("this job has skipped milestones prior to the milestone {0:?}.")]
     SkippedDates(Milestone),
     #[error("this job has a loss date, but it has already been installed/contracted.")]
     InvalidLoss,
@@ -413,6 +413,7 @@ impl TryFrom<serde_json::Value> for Job {
                 .and_then(|value| value.as_i64())
                 .filter(|&val| val != 0)
                 .and_then(|secs| DateTime::<Utc>::from_timestamp(secs, 0))
+                .map(|dt| dt.with_time(NaiveTime::MIN).unwrap())
         }
 
         // extract all the milestone dates
