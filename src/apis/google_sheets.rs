@@ -1,6 +1,7 @@
 mod oauth;
 pub mod spreadsheet;
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 use anyhow::anyhow;
@@ -15,7 +16,6 @@ use spreadsheet::update::Request;
 use spreadsheet::GridCoordinate;
 use spreadsheet::SheetProperties;
 use spreadsheet::Spreadsheet;
-use std::collections::HashMap;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
@@ -97,14 +97,12 @@ pub fn update_spreadsheet(
         success_response.into_json().map_err(anyhow::Error::from)?
     };
 
-    // keep track of existing sheet IDs so we can update existing sheets, as
-    // as well as delete sheets that we don't care about, as well as assign
-    // sheet ids to new sheets without conflicts
+    // keep track of existing sheet IDs
     let mut title_to_sheet_id = HashMap::new();
     let mut existing_sheet_ids = HashSet::new();
     if let Some(sheets) = existing_spreadsheet.sheets {
         for sheet in sheets {
-            let SheetProperties { sheet_id, title } = sheet.properties;
+            let SheetProperties { sheet_id, title, .. } = sheet.properties;
             if let (Some(sheet_id), Some(title)) = (sheet_id, title) {
                 title_to_sheet_id.insert(title, sheet_id);
             }
@@ -113,6 +111,7 @@ pub fn update_spreadsheet(
             }
         }
     }
+    let mut sheets_to_delete = existing_sheet_ids.clone();
 
     // prepare the correct JSON to send with the `batchUpdate` request. see
     // https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/batchUpdate
@@ -126,40 +125,33 @@ pub fn update_spreadsheet(
         });
     }
 
-    // update the content of the sheets
+    // add new sheets
     if let Some(sheets) = spreadsheet.sheets {
         for sheet in sheets {
             if sheet.properties.sheet_id.is_some() {
-                warn!("Sheet ID is ignored when updating a spreadsheet; use the title instead");
+                warn!("Sheet ID is ignored when updating a spreadsheet");
             }
-            let sheet_id = 'sheet_id: {
-                if let Some(title) = &sheet.properties.title {
-                    if let Some(sheet_id) = title_to_sheet_id.remove(title) {
-                        // we would push a request to update the sheet
-                        // properties here, but there are none to update, since
-                        // sheet_id and title are the only fields we currently
-                        // support and they are already known to match at this
-                        // point
-
-                        break 'sheet_id sheet_id;
-                    }
-                }
-                // getting here means that the sheet does not have an existing
-                // counterpart. create a new sheet
-
+            let sheet_id = if let Some(sheet_id) =
+                title_to_sheet_id.get(sheet.properties.title.as_ref().unwrap())
+            {
+                // delete the sheet if it already exists and steal its ID
+                requests.push(Request::DeleteSheet { sheet_id: *sheet_id });
+                sheets_to_delete.remove(sheet_id);
+                *sheet_id
+            } else {
                 // find a sheet ID that is not already in use
                 let mut sheet_id = 0;
                 while existing_sheet_ids.contains(&sheet_id) {
                     sheet_id += 1;
                 }
                 existing_sheet_ids.insert(sheet_id);
-
-                // push a request to add a new sheet with the new id
-                requests.push(Request::AddSheet {
-                    properties: SheetProperties { sheet_id: Some(sheet_id), ..sheet.properties },
-                });
                 sheet_id
             };
+
+            // push a request to add a new sheet with the id
+            requests.push(Request::AddSheet {
+                properties: SheetProperties { sheet_id: Some(sheet_id), ..sheet.properties },
+            });
 
             if let Some(grid_data) = sheet.data {
                 // push a request to update the content of the sheet
@@ -177,7 +169,7 @@ pub fn update_spreadsheet(
     }
 
     // remove the sheets that don't exist anymore
-    for (_title, sheet_id) in title_to_sheet_id {
+    for sheet_id in sheets_to_delete {
         requests.push(Request::DeleteSheet { sheet_id });
     }
 
@@ -187,6 +179,13 @@ pub fn update_spreadsheet(
         "includeSpreadsheetInResponse": true,
         "responseIncludeGridData": false,
     });
+
+    // Write request body to file for debugging
+    if let Ok(mut file) = std::fs::File::create("google_sheets_request.json") {
+        if let Err(e) = serde_json::to_writer_pretty(&mut file, &request_body) {
+            warn!("Failed to write Google Sheets request to file: {}", e);
+        }
+    }
 
     let url = format!("{ENDPOINT_SPREADSHEETS}/{spreadsheet_id}:batchUpdate");
 
@@ -204,7 +203,8 @@ pub fn update_spreadsheet(
         Err(err) => {
             return Err(TryWithCredentialsError::Other(anyhow!(
                 "request to update spreadsheet failed: {}",
-                err
+                // err,
+                err.into_response().unwrap().into_string().unwrap(),
             )));
         }
     };

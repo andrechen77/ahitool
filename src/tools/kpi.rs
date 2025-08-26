@@ -286,8 +286,8 @@ pub mod output {
         apis::google_sheets::{
             self,
             spreadsheet::{
-                CellData, ExtendedValue, GridData, RowData, Sheet, SheetProperties, Spreadsheet,
-                SpreadsheetProperties,
+                CellData, ExtendedValue, GridData, GridProperties, RowData, Sheet, SheetProperties,
+                Spreadsheet, SpreadsheetProperties,
             },
         },
         jobs::{AnalyzedJob, JobAnalysisError, TimeDelta},
@@ -664,6 +664,7 @@ pub mod output {
                 Sheet {
                     properties: SheetProperties {
                         title: Some(format!("Stats {}", rep)),
+                        grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
                         ..Default::default()
                     },
                     data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
@@ -693,6 +694,7 @@ pub mod output {
         sheets.push(Sheet {
             properties: SheetProperties {
                 title: Some("Red Flags".to_string()),
+                grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
                 ..Default::default()
             },
             data: Some(GridData { start_row: 0, start_column: 0, row_data: rows }),
@@ -710,6 +712,7 @@ pub mod output {
         sheets.push(Sheet {
             properties: SheetProperties {
                 title: Some("Abandoned Jobs".to_string()),
+                grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
                 ..Default::default()
             },
             data: Some(GridData { start_row: 0, start_column: 0, row_data: rows }),

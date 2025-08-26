@@ -31,6 +31,8 @@ pub struct SheetProperties {
     pub sheet_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grid_properties: Option<GridProperties>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -76,6 +78,12 @@ pub struct GridCoordinate {
     pub column_index: u64,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GridProperties {
+    #[serde(rename = "rowCount")]
+    pub row_count: u64,
+}
+
 pub mod update {
     use serde::Serialize;
 
@@ -95,6 +103,9 @@ pub mod update {
             start: super::GridCoordinate,
         },
         #[serde(rename = "deleteSheet")]
-        DeleteSheet { sheet_id: u64 },
+        DeleteSheet {
+            #[serde(rename = "sheetId")]
+            sheet_id: u64,
+        },
     }
 }
