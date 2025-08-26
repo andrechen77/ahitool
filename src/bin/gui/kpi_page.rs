@@ -153,7 +153,11 @@ impl KpiPage {
         };
         let kpi_data_tx = self.kpi_data.start_fetch();
         thread::spawn(move || {
-            let kpi_data = tools::kpi::calculate_kpi(jn_data.jobs.iter().cloned(), date_range);
+            let kpi_data = tools::kpi::calculate_kpi(
+                jn_data.jobs.iter().cloned(),
+                date_range,
+                chrono::Local::now().to_utc(),
+            );
             let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
         });
     }

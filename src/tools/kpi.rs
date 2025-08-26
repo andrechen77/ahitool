@@ -6,6 +6,7 @@ use crate::date_range::DateRange;
 use crate::jobs::AnalyzedJob;
 use crate::jobs::Job;
 use crate::jobs::JobAnalysisError;
+use crate::jobs::Timestamp;
 use csv as csv_crate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -34,20 +35,24 @@ pub use processing::JobTrackerStats;
 pub struct KpiData {
     pub stats_by_rep: BTreeMap<KpiSubject, JobTrackerStats>,
     pub red_flags_by_rep: BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
+    pub abandoned_jobs: Vec<Arc<AnalyzedJob>>,
 }
 
 pub fn calculate_kpi<'a>(
     jobs: impl IntoIterator<Item = Arc<Job>>,
     date_range: DateRange,
+    // Any unsettled jobs whose last update was before this date are marked as
+    // abandoned.
+    abandon_date: Timestamp,
 ) -> KpiData {
-    let (trackers_by_rep, red_flags_by_rep) =
-        processing::process_jobs(jobs.into_iter(), date_range);
+    let (trackers_by_rep, red_flags_by_rep, abandoned_jobs) =
+        processing::process_jobs(jobs.into_iter(), date_range, abandon_date);
     let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
         .into_iter()
         .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
         .filter(|(_, stats)| stats.appt_count > 0)
         .collect();
-    KpiData { stats_by_rep, red_flags_by_rep }
+    KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs }
 }
 
 mod processing {
@@ -58,20 +63,29 @@ mod processing {
     use crate::{
         date_range::DateRange,
         job_tracker::{self, CalcStatsResult, JobTracker3x5},
-        jobs::{self, AnalyzedJob, Job, JobAnalysisError, JobKind, Milestone, TimeDelta},
+        jobs::{
+            self, AnalyzedJob, Job, JobAnalysisError, JobKind, Milestone, TimeDelta, Timestamp,
+        },
     };
 
     use super::KpiSubject;
 
-    type TrackersAndFlags = (
+    type ProcessJobsResult = (
         BTreeMap<KpiSubject, JobTracker3x5>,
         BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
+        // abandoned jobs
+        Vec<Arc<AnalyzedJob>>,
     );
 
+    /// Given raw job data, calculates the KPI data for each representative.
+    /// Any errors in the job data are returned in the red flags.
     pub fn process_jobs(
         jobs: impl Iterator<Item = Arc<Job>>,
         date_range: DateRange,
-    ) -> TrackersAndFlags {
+        // If provided, any unsettled jobs whose last update was before this
+        // date are marked as abandoned.
+        abandon_date: Timestamp,
+    ) -> ProcessJobsResult {
         let DateRange { from_date, to_date } = date_range;
         info!(
             "Processing jobs settled between {} and {}",
@@ -81,6 +95,7 @@ mod processing {
 
         let mut trackers = BTreeMap::new();
         let mut red_flags = BTreeMap::new();
+        let mut abandoned_jobs = Vec::new();
         for job in jobs {
             let (analyzed, errors) = jobs::analyze_job(job);
             let analyzed = Arc::new(analyzed);
@@ -115,6 +130,8 @@ mod processing {
                                 analysis.loss_timestamp,
                             );
                     }
+                } else if analysis.last_update() < Some(abandon_date) {
+                    abandoned_jobs.push(analyzed.clone());
                 }
             }
 
@@ -126,7 +143,7 @@ mod processing {
             }
         }
 
-        (trackers, red_flags)
+        (trackers, red_flags, abandoned_jobs)
     }
 
     #[derive(Debug)]
@@ -343,6 +360,20 @@ pub mod output {
             Ok(())
         }
 
+        pub fn print_abandoned_jobs<'a, 'w, W>(
+            abandoned_jobs: &'a [Arc<AnalyzedJob>],
+            out: &'w mut W,
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
+            writeln!(out, "Abandoned jobs: ================")?;
+            for job in abandoned_jobs {
+                writeln!(out, "{}", job.job.job_number.as_deref().unwrap_or("unknown job #"))?;
+            }
+            Ok(())
+        }
+
         pub fn print_entire_report_directory(
             kpi_result: &KpiData,
             output_dir: &Path,
@@ -352,6 +383,7 @@ pub mod output {
                 output_dir,
                 print_single_tracker,
                 print_red_flags,
+                print_abandoned_jobs,
             )
         }
 
@@ -364,6 +396,7 @@ pub mod output {
                 out,
                 print_single_tracker,
                 print_red_flags,
+                print_abandoned_jobs,
             )
         }
     }
@@ -435,6 +468,21 @@ pub mod output {
             Ok(())
         }
 
+        pub fn print_abandoned_jobs<'a, 'w, W>(
+            abandoned_jobs: &'a [Arc<AnalyzedJob>],
+            out: &'w mut W,
+        ) -> std::io::Result<()>
+        where
+            W: Write,
+        {
+            let mut writer = csv_crate::Writer::from_writer(out);
+            writer.write_record(&["Job Number"])?;
+            for job in abandoned_jobs {
+                writer.write_record(&[job.job.job_number.as_deref().unwrap_or("unknown job #")])?;
+            }
+            Ok(())
+        }
+
         pub fn print_entire_report_directory(
             kpi_result: &KpiData,
             output_dir: &Path,
@@ -444,6 +492,7 @@ pub mod output {
                 output_dir,
                 print_single_tracker,
                 print_red_flags,
+                print_abandoned_jobs,
             )
         }
 
@@ -456,15 +505,17 @@ pub mod output {
                 out,
                 print_single_tracker,
                 print_red_flags,
+                print_abandoned_jobs,
             )
         }
     }
 
-    fn print_entire_report_directory<F0, F1>(
+    fn print_entire_report_directory<F0, F1, F2>(
         kpi_result: &KpiData,
         output_dir: &Path,
         print_single_tracker: F0,
         print_red_flags: F1,
+        print_abandoned_jobs: F2,
     ) -> std::io::Result<()>
     where
         F0: for<'a, 'b, 'w> Fn(
@@ -480,8 +531,9 @@ pub mod output {
             >,
             &'w mut BufWriter<File>,
         ) -> std::io::Result<()>,
+        F2: for<'a, 'w> Fn(&'a [Arc<AnalyzedJob>], &'w mut BufWriter<File>) -> std::io::Result<()>,
     {
-        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_result;
+        let KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs } = kpi_result;
 
         // make sure that the output directory exists
         std::fs::create_dir_all(output_dir)?;
@@ -504,14 +556,23 @@ pub mod output {
         print_red_flags(red_flags_by_rep.iter(), &mut out_file)?;
         out_file.flush()?;
 
+        // print the abandoned jobs
+        let mut out_file = BufWriter::new(
+            std::fs::File::create(output_dir.join("abandoned-jobs.txt"))
+                .expect("the directory should exist"),
+        );
+        print_abandoned_jobs(abandoned_jobs, &mut out_file)?;
+        out_file.flush()?;
+
         Ok(())
     }
 
-    fn print_entire_report_to_writer<W, F0, F1>(
+    fn print_entire_report_to_writer<W, F0, F1, F2>(
         kpi_result: &KpiData,
         mut out: W,
         print_single_tracker: F0,
         print_red_flags: F1,
+        print_abandoned_jobs: F2,
     ) -> std::io::Result<()>
     where
         W: Write,
@@ -528,8 +589,9 @@ pub mod output {
             >,
             &'w mut W,
         ) -> std::io::Result<()>,
+        F2: for<'a, 'w> Fn(&'a [Arc<AnalyzedJob>], &'w mut W) -> std::io::Result<()>,
     {
-        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_result;
+        let KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs } = kpi_result;
 
         // print the trackers
         for (rep, stats) in stats_by_rep {
@@ -539,6 +601,10 @@ pub mod output {
 
         // print the red flags
         print_red_flags(red_flags_by_rep.iter(), &mut out)?;
+
+        // print the abandoned jobs
+        print_abandoned_jobs(abandoned_jobs, &mut out)?;
+
         Ok(())
     }
 
@@ -556,7 +622,7 @@ pub mod output {
             }
         }
 
-        let KpiData { stats_by_rep, red_flags_by_rep } = kpi_data;
+        let KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs } = kpi_data;
 
         // create a stats sheet for each rep
         let mut sheets: Vec<_> = stats_by_rep
@@ -627,6 +693,23 @@ pub mod output {
         sheets.push(Sheet {
             properties: SheetProperties {
                 title: Some("Red Flags".to_string()),
+                ..Default::default()
+            },
+            data: Some(GridData { start_row: 0, start_column: 0, row_data: rows }),
+            ..Default::default()
+        });
+
+        // create the abandoned jobs sheet
+        let mut rows = Vec::new();
+        rows.push(mk_row([ExtendedValue::StringValue("Job Number".to_string())]));
+        for job in abandoned_jobs {
+            rows.push(mk_row([ExtendedValue::StringValue(
+                job.job.job_number.as_deref().unwrap_or("unknown job #").to_string(),
+            )]));
+        }
+        sheets.push(Sheet {
+            properties: SheetProperties {
+                title: Some("Abandoned Jobs".to_string()),
                 ..Default::default()
             },
             data: Some(GridData { start_row: 0, start_column: 0, row_data: rows }),

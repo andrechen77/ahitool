@@ -225,6 +225,11 @@ impl JobAnalysis {
         }
         None
     }
+
+    /// Returns the time last update of this job
+    pub fn last_update(&self) -> Option<Timestamp> {
+        self.timestamps.iter().rev().find_map(|&ts| ts).max(self.loss_timestamp)
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
