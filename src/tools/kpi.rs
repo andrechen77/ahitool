@@ -35,24 +35,25 @@ pub use processing::JobTrackerStats;
 pub struct KpiData {
     pub stats_by_rep: BTreeMap<KpiSubject, JobTrackerStats>,
     pub red_flags_by_rep: BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
+    pub unsettled_jobs: Vec<Arc<AnalyzedJob>>,
     pub abandoned_jobs: Vec<Arc<AnalyzedJob>>,
+    pub milestoneless_jobs: Vec<Arc<AnalyzedJob>>,
 }
 
 pub fn calculate_kpi<'a>(
     jobs: impl IntoIterator<Item = Arc<Job>>,
     date_range: DateRange,
-    // Any unsettled jobs whose last update was before this date are marked as
-    // abandoned.
+    unsettled_date: Timestamp,
     abandon_date: Timestamp,
 ) -> KpiData {
-    let (trackers_by_rep, red_flags_by_rep, abandoned_jobs) =
-        processing::process_jobs(jobs.into_iter(), date_range, abandon_date);
+    let (trackers_by_rep, red_flags_by_rep, unsettled_jobs, abandoned_jobs, milestoneless_jobs) =
+        processing::process_jobs(jobs.into_iter(), date_range, unsettled_date, abandon_date);
     let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
         .into_iter()
         .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
         .filter(|(_, stats)| stats.appt_count > 0)
         .collect();
-    KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs }
+    KpiData { stats_by_rep, red_flags_by_rep, unsettled_jobs, abandoned_jobs, milestoneless_jobs }
 }
 
 mod processing {
@@ -73,7 +74,11 @@ mod processing {
     type ProcessJobsResult = (
         BTreeMap<KpiSubject, JobTracker3x5>,
         BTreeMap<KpiSubject, Vec<(Arc<AnalyzedJob>, JobAnalysisError)>>,
+        // unsettled jobs
+        Vec<Arc<AnalyzedJob>>,
         // abandoned jobs
+        Vec<Arc<AnalyzedJob>>,
+        // milestoneless jobs
         Vec<Arc<AnalyzedJob>>,
     );
 
@@ -83,7 +88,10 @@ mod processing {
         jobs: impl Iterator<Item = Arc<Job>>,
         date_range: DateRange,
         // If provided, any unsettled jobs whose last update was before this
-        // date are marked as abandoned.
+        // date are marked as such.
+        unsettled_date: Timestamp,
+        // If provided, any abandoned jobs whose last update was before this
+        // date are marked as such.
         abandon_date: Timestamp,
     ) -> ProcessJobsResult {
         let DateRange { from_date, to_date } = date_range;
@@ -95,7 +103,9 @@ mod processing {
 
         let mut trackers = BTreeMap::new();
         let mut red_flags = BTreeMap::new();
+        let mut unsettled_jobs = Vec::new();
         let mut abandoned_jobs = Vec::new();
+        let mut milestoneless_jobs = Vec::new();
         for job in jobs {
             let (analyzed, errors) = jobs::analyze_job(job);
             let analyzed = Arc::new(analyzed);
@@ -130,8 +140,14 @@ mod processing {
                                 analysis.loss_timestamp,
                             );
                     }
-                } else if analysis.last_update() < Some(abandon_date) {
-                    abandoned_jobs.push(analyzed.clone());
+                } else if let Some(last_update) = analysis.last_update() {
+                    if last_update < abandon_date {
+                        abandoned_jobs.push(analyzed.clone());
+                    } else {
+                        unsettled_jobs.push(analyzed.clone());
+                    }
+                } else {
+                    milestoneless_jobs.push(analyzed.clone());
                 }
             }
 
@@ -143,7 +159,7 @@ mod processing {
             }
         }
 
-        (trackers, red_flags, abandoned_jobs)
+        (trackers, red_flags, unsettled_jobs, abandoned_jobs, milestoneless_jobs)
     }
 
     #[derive(Debug)]
@@ -533,7 +549,13 @@ pub mod output {
         ) -> std::io::Result<()>,
         F2: for<'a, 'w> Fn(&'a [Arc<AnalyzedJob>], &'w mut BufWriter<File>) -> std::io::Result<()>,
     {
-        let KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs } = kpi_result;
+        let KpiData {
+            stats_by_rep,
+            red_flags_by_rep,
+            unsettled_jobs,
+            abandoned_jobs,
+            milestoneless_jobs,
+        } = kpi_result;
 
         // make sure that the output directory exists
         std::fs::create_dir_all(output_dir)?;
@@ -555,6 +577,8 @@ pub mod output {
         );
         print_red_flags(red_flags_by_rep.iter(), &mut out_file)?;
         out_file.flush()?;
+
+        // TODO print unsettled and milestoneless
 
         // print the abandoned jobs
         let mut out_file = BufWriter::new(
@@ -591,7 +615,13 @@ pub mod output {
         ) -> std::io::Result<()>,
         F2: for<'a, 'w> Fn(&'a [Arc<AnalyzedJob>], &'w mut W) -> std::io::Result<()>,
     {
-        let KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs } = kpi_result;
+        let KpiData {
+            stats_by_rep,
+            red_flags_by_rep,
+            unsettled_jobs,
+            abandoned_jobs,
+            milestoneless_jobs,
+        } = kpi_result;
 
         // print the trackers
         for (rep, stats) in stats_by_rep {
@@ -601,6 +631,8 @@ pub mod output {
 
         // print the red flags
         print_red_flags(red_flags_by_rep.iter(), &mut out)?;
+
+        // TODO print unsettled and milestoneless
 
         // print the abandoned jobs
         print_abandoned_jobs(abandoned_jobs, &mut out)?;
@@ -622,7 +654,13 @@ pub mod output {
             }
         }
 
-        let KpiData { stats_by_rep, red_flags_by_rep, abandoned_jobs } = kpi_data;
+        let KpiData {
+            stats_by_rep,
+            red_flags_by_rep,
+            unsettled_jobs,
+            abandoned_jobs,
+            milestoneless_jobs,
+        } = kpi_data;
 
         // create a stats sheet for each rep
         let mut sheets: Vec<_> = stats_by_rep
@@ -701,44 +739,66 @@ pub mod output {
             ..Default::default()
         });
 
-        // create the abandoned jobs sheet
-        let mut rows = Vec::new();
-        rows.push(mk_row([
-            ExtendedValue::StringValue("Job Number".to_string()),
-            ExtendedValue::StringValue("Sales Rep".to_string()),
-            ExtendedValue::StringValue("Last Update".to_string()),
-            ExtendedValue::StringValue("Last Update Milestone".to_string()),
-        ]));
-        for job in abandoned_jobs {
+        fn make_job_list_sheet(
+            sheet_name: String,
+            jobs: impl Iterator<Item = Arc<AnalyzedJob>>,
+        ) -> Sheet {
+            let mut rows = Vec::new();
             rows.push(mk_row([
-                ExtendedValue::StringValue(
-                    job.job.job_number.as_deref().unwrap_or("unknown job #").to_string(),
-                ),
-                ExtendedValue::StringValue(job.job.sales_rep.clone().unwrap_or_default()),
-                ExtendedValue::StringValue(
-                    job.analysis
-                        .as_ref()
-                        .and_then(|analysis| analysis.last_update())
-                        .map(|ts| ts.date_naive().to_string())
-                        .unwrap_or_default(),
-                ),
-                ExtendedValue::StringValue(
-                    job.analysis
-                        .as_ref()
-                        .map(|analysis| analysis.last_update_milestone.to_string())
-                        .unwrap_or_default(),
-                ),
+                ExtendedValue::StringValue("Job Number".to_string()),
+                ExtendedValue::StringValue("Sales Rep".to_string()),
+                ExtendedValue::StringValue("Last Update".to_string()),
+                ExtendedValue::StringValue("Last Update Milestone".to_string()),
             ]));
-        }
-        sheets.push(Sheet {
-            properties: SheetProperties {
-                title: Some("Abandoned Jobs".to_string()),
-                grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+            for job in jobs {
+                rows.push(mk_row([
+                    ExtendedValue::StringValue(
+                        job.job.job_number.as_deref().unwrap_or("unknown job #").to_string(),
+                    ),
+                    ExtendedValue::StringValue(job.job.sales_rep.clone().unwrap_or_default()),
+                    ExtendedValue::StringValue(
+                        job.analysis
+                            .as_ref()
+                            .and_then(|analysis| analysis.last_update())
+                            .map(|ts| ts.date_naive().to_string())
+                            .unwrap_or_default(),
+                    ),
+                    ExtendedValue::StringValue(
+                        job.analysis
+                            .as_ref()
+                            .map(|analysis| analysis.last_update_milestone.to_string())
+                            .unwrap_or_default(),
+                    ),
+                ]));
+            }
+            Sheet {
+                properties: SheetProperties {
+                    title: Some(sheet_name),
+                    grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+                    ..Default::default()
+                },
+                data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
                 ..Default::default()
-            },
-            data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
-            ..Default::default()
-        });
+            }
+        }
+
+        // create the unsettled jobs sheet
+        sheets.push(make_job_list_sheet(
+            "Unsettled Jobs".to_string(),
+            unsettled_jobs.iter().cloned(),
+        ));
+
+        // create the abandoned jobs sheet
+        sheets.push(make_job_list_sheet(
+            "Abandoned Jobs".to_string(),
+            abandoned_jobs.iter().cloned(),
+        ));
+
+        // create the milestoneless jobs sheet
+        sheets.push(make_job_list_sheet(
+            "Milestoneless Jobs".to_string(),
+            milestoneless_jobs.iter().cloned(),
+        ));
 
         // create the spreadsheet
         let spreadsheet = Spreadsheet {

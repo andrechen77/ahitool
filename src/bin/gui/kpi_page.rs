@@ -173,8 +173,10 @@ impl KpiPage {
             let jobs = jn_data.jobs.iter().cloned().filter(|job| {
                 lead_source_filter.is_none() || job.lead_source == lead_source_filter
             });
+            let unsettled_date = chrono::Local::now().to_utc();
+            let abandon_date = chrono::Local::now().to_utc() - chrono::Duration::days(60);
             let kpi_data =
-                tools::kpi::calculate_kpi(jobs, date_range, chrono::Local::now().to_utc());
+                tools::kpi::calculate_kpi(jobs, date_range, unsettled_date, abandon_date);
             let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
         });
     }
