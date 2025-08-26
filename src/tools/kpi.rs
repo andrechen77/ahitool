@@ -697,17 +697,38 @@ pub mod output {
                 grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
                 ..Default::default()
             },
-            data: Some(GridData { start_row: 0, start_column: 0, row_data: rows }),
+            data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
             ..Default::default()
         });
 
         // create the abandoned jobs sheet
         let mut rows = Vec::new();
-        rows.push(mk_row([ExtendedValue::StringValue("Job Number".to_string())]));
+        rows.push(mk_row([
+            ExtendedValue::StringValue("Job Number".to_string()),
+            ExtendedValue::StringValue("Sales Rep".to_string()),
+            ExtendedValue::StringValue("Last Update".to_string()),
+            ExtendedValue::StringValue("Last Update Milestone".to_string()),
+        ]));
         for job in abandoned_jobs {
-            rows.push(mk_row([ExtendedValue::StringValue(
-                job.job.job_number.as_deref().unwrap_or("unknown job #").to_string(),
-            )]));
+            rows.push(mk_row([
+                ExtendedValue::StringValue(
+                    job.job.job_number.as_deref().unwrap_or("unknown job #").to_string(),
+                ),
+                ExtendedValue::StringValue(job.job.sales_rep.clone().unwrap_or_default()),
+                ExtendedValue::StringValue(
+                    job.analysis
+                        .as_ref()
+                        .and_then(|analysis| analysis.last_update())
+                        .map(|ts| ts.date_naive().to_string())
+                        .unwrap_or_default(),
+                ),
+                ExtendedValue::StringValue(
+                    job.analysis
+                        .as_ref()
+                        .map(|analysis| analysis.last_update_milestone.to_string())
+                        .unwrap_or_default(),
+                ),
+            ]));
         }
         sheets.push(Sheet {
             properties: SheetProperties {
@@ -715,7 +736,7 @@ pub mod output {
                 grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
                 ..Default::default()
             },
-            data: Some(GridData { start_row: 0, start_column: 0, row_data: rows }),
+            data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
             ..Default::default()
         });
 
