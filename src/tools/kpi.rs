@@ -809,17 +809,7 @@ pub mod output {
             ..Default::default()
         };
 
-        let (id, url) = google_sheets::run_with_credentials(|token| {
-            let spreadsheet = spreadsheet.clone();
-            if let Some(spreadsheet_id) = spreadsheet_id {
-                google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet)
-                    .map(|url| (spreadsheet_id.to_owned(), url))
-            } else {
-                google_sheets::create_spreadsheet(&token, spreadsheet)
-            }
-        })?;
-        utils::open_url(url.as_str());
-        Ok(id)
+        google_sheets::write_spreadsheet(spreadsheet_id, spreadsheet)
     }
 
     pub fn into_days(time: TimeDelta) -> f64 {

@@ -8,12 +8,12 @@ use crate::{
 use std::{io::Write, sync::Arc, thread};
 
 #[derive(Default)]
-pub struct JobNimbusViewer {
+pub struct DebugPrint {
     pub output_file: String,
     printing: DataLoader<()>,
 }
 
-impl JobNimbusViewer {
+impl DebugPrint {
     pub fn new() -> Self {
         Self::default()
     }

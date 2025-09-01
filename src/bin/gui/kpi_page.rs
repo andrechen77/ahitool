@@ -24,6 +24,8 @@ pub struct KpiPage {
     date_range_custom: (String, String),
     /// The current value of the lead source dropdown selector.
     lead_source_option: Option<String>,
+    /// The current value of the branch dropdown selector
+    branch: Option<String>,
     kpi_data: DataLoader<Option<Arc<KpiData>>>,
     /// Tracks the progress of exporting the data to Google Sheets. The data
     /// is the id of the successfully exported spreadsheet.
@@ -38,6 +40,7 @@ impl KpiPage {
             date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
             date_range_custom: (String::new(), String::new()),
             lead_source_option: None,
+            branch: None,
             kpi_data: DataLoader::new(None),
             export_data: DataLoader::new(None),
         }
@@ -92,6 +95,14 @@ impl KpiPage {
                         ui.text_edit_singleline(&mut self.date_range_custom.1);
                     });
                 }
+
+                egui::ComboBox::from_label("Filter by branch")
+                    .selected_text(self.branch.as_deref().unwrap_or("All branches"))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.branch, None, "All branches");
+                        ui.selectable_value(&mut self.branch, Some("OH".to_string()), "OH");
+                        ui.selectable_value(&mut self.branch, Some("MI".to_string()), "MI");
+                    });
 
                 egui::ComboBox::from_label("Filter by lead source")
                     .selected_text(self.lead_source_option.as_deref().unwrap_or("All sources"))
@@ -169,10 +180,14 @@ impl KpiPage {
         };
         let kpi_data_tx = self.kpi_data.start_fetch();
         let lead_source_filter = self.lead_source_option.clone();
+        let branch_filter = self.branch.clone();
         thread::spawn(move || {
-            let jobs = jn_data.jobs.iter().cloned().filter(|job| {
-                lead_source_filter.is_none() || job.lead_source == lead_source_filter
-            });
+            let jobs = jn_data
+                .jobs
+                .iter()
+                .cloned()
+                .filter(|job| lead_source_filter.is_none() || job.lead_source == lead_source_filter)
+                .filter(|job| branch_filter.is_none() || job.state == branch_filter);
             let unsettled_date = chrono::Local::now().to_utc();
             let abandon_date = chrono::Local::now().to_utc() - chrono::Duration::days(60);
             let kpi_data =

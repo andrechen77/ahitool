@@ -2,11 +2,12 @@ use app::MainApp;
 use eframe::egui;
 use tracing::warn;
 
+mod all_jobs_page;
 mod app;
 mod ar_page;
 mod data_loader;
+mod debug_print;
 mod job_nimbus_client;
-mod job_viewer;
 mod kpi_page;
 mod update_page;
 

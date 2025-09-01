@@ -5,6 +5,7 @@ use tracing::warn;
 
 const KEY_JNID: &str = "jnid";
 const KEY_SALES_REP: &str = "sales_rep_name";
+const KEY_STATE: &str = "state_text";
 const KEY_INSURANCE_CHECKBOX: &str = "Insurance Job?";
 const KEY_INSURANCE_COMPANY_NAME: &str = "Insurance Company";
 const KEY_INSURANCE_CLAIM_NUMBER: &str = "Claim #";
@@ -153,6 +154,7 @@ pub struct Job {
     pub status: Status,
     pub status_mod_date: Timestamp,
     pub sales_rep: Option<String>,
+    pub state: Option<String>,
     pub insurance_checkbox: bool,
     pub insurance_claim_number: Option<String>,
     // currently unused by anything, since having an insurance company name
@@ -385,6 +387,7 @@ impl TryFrom<serde_json::Value> for Job {
         }
 
         let sales_rep = get_owned_nonempty(&map, KEY_SALES_REP);
+        let state = get_owned_nonempty(&map, KEY_STATE);
         let insurance_checkbox =
             map.get(KEY_INSURANCE_CHECKBOX).and_then(|val| val.as_bool()).unwrap_or(false);
         let insurance_company_name = get_owned_nonempty(&map, KEY_INSURANCE_COMPANY_NAME);
@@ -432,6 +435,7 @@ impl TryFrom<serde_json::Value> for Job {
         Ok(Job {
             jnid,
             sales_rep,
+            state,
             status,
             status_mod_date,
             insurance_checkbox,
@@ -474,6 +478,7 @@ mod test {
         Arc::new(Job {
             jnid: "0".to_owned(),
             sales_rep: None,
+            state: None,
             status: Status::JobsInProgress, // arbitrary choice that shouldn't matter for tests
             status_mod_date: dt(0),
             insurance_checkbox: insurance,
@@ -703,6 +708,7 @@ mod test {
         let job = Arc::new(Job {
             jnid: "0".to_owned(),
             sales_rep: None,
+            state: None,
             status: Status::JobsInProgress, // arbitrary; shouldn't affect tests
             status_mod_date: dt(0),
             insurance_checkbox: false,

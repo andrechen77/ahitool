@@ -1,15 +1,16 @@
 use ahitool::utils::FileBacked;
 
 use crate::{
-    ar_page::ArPage, job_nimbus_client::JobNimbusClient, job_viewer::JobNimbusViewer,
-    kpi_page::KpiPage, update_page::UpdatePage,
+    all_jobs_page::AllJobsPage, ar_page::ArPage, debug_print::DebugPrint,
+    job_nimbus_client::JobNimbusClient, kpi_page::KpiPage, update_page::UpdatePage,
 };
 
 pub struct MainApp {
     pub current_tool: AhitoolTool,
     pub job_nimbus_client: JobNimbusClient,
-    pub job_nimbus_viewer: JobNimbusViewer,
+    pub debug_print: DebugPrint,
     pub kpi_page_state: KpiPage,
+    pub all_jobs_page_state: AllJobsPage,
     pub ar_page_state: ArPage,
     pub update_page_state: UpdatePage,
 }
@@ -18,8 +19,9 @@ pub struct MainApp {
 pub enum AhitoolTool {
     #[default]
     None,
-    JobViewer,
+    DebugPrint,
     Kpi,
+    AllJobs,
     Ar,
     SelfUpdate,
 }
@@ -31,6 +33,10 @@ impl MainApp {
                 "kpi_spreadsheet_id.json",
                 || String::new(),
             )),
+            all_jobs_page_state: AllJobsPage::new(FileBacked::new_from_file_or(
+                "all_jobs_spreadsheet_id.json",
+                || String::new(),
+            )),
             ar_page_state: ArPage::new(FileBacked::new_from_file_or(
                 "ar_spreadsheet_id.json",
                 || String::new(),
@@ -39,7 +45,7 @@ impl MainApp {
                 "job_nimbus_api_key.json",
                 || String::new(),
             )),
-            job_nimbus_viewer: JobNimbusViewer::new(),
+            debug_print: DebugPrint::new(),
             update_page_state: UpdatePage::new(),
             current_tool: AhitoolTool::None,
         }
@@ -51,8 +57,9 @@ impl MainApp {
         let heading = ui.horizontal(|ui| {
             ui.heading(match self.current_tool {
                 AhitoolTool::None => "Welcome to AHItool",
-                AhitoolTool::JobViewer => "Job Viewer",
+                AhitoolTool::DebugPrint => "Job Viewer",
                 AhitoolTool::Kpi => "Key Performance Indicators",
+                AhitoolTool::AllJobs => "All Jobs",
                 AhitoolTool::Ar => "Accounts Receivable",
                 AhitoolTool::SelfUpdate => "Self Update",
             });
@@ -72,11 +79,14 @@ impl MainApp {
                 if ui.button("KPI").clicked() {
                     self.current_tool = AhitoolTool::Kpi;
                 }
+                if ui.button("All Jobs").clicked() {
+                    self.current_tool = AhitoolTool::AllJobs;
+                }
                 if ui.button("AR").clicked() {
                     self.current_tool = AhitoolTool::Ar;
                 }
-                if ui.button("Job Viewer").clicked() {
-                    self.current_tool = AhitoolTool::JobViewer;
+                if ui.button("Debug Print").clicked() {
+                    self.current_tool = AhitoolTool::DebugPrint;
                 }
                 if ui.button("Self Update").clicked() {
                     self.current_tool = AhitoolTool::SelfUpdate;
@@ -89,10 +99,11 @@ impl MainApp {
             AhitoolTool::None => {
                 ui.label("Please choose a subtool.");
             }
-            AhitoolTool::JobViewer => {
-                self.job_nimbus_viewer.render(ui, &mut self.job_nimbus_client)
-            }
+            AhitoolTool::DebugPrint => self.debug_print.render(ui, &mut self.job_nimbus_client),
             AhitoolTool::Kpi => self.kpi_page_state.render(ui, &mut self.job_nimbus_client),
+            AhitoolTool::AllJobs => {
+                self.all_jobs_page_state.render(ui, &mut self.job_nimbus_client)
+            }
             AhitoolTool::Ar => self.ar_page_state.render(ui, &mut self.job_nimbus_client),
             AhitoolTool::SelfUpdate => self.update_page_state.render(ui),
         }

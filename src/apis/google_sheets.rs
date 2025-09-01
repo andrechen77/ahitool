@@ -20,6 +20,8 @@ use tracing::info;
 use tracing::trace;
 use tracing::warn;
 
+use crate::utils;
+
 const ENDPOINT_SPREADSHEETS: &str = "https://sheets.googleapis.com/v4/spreadsheets";
 
 /// Creates the specified spreadsheet in the user's Google Drive. Return the id
@@ -233,4 +235,23 @@ pub fn update_spreadsheet(
     };
     info!("Updated Google Sheet at {}", url);
     Ok(url)
+}
+
+// Either create or update a spreadsheet based on whether a spreadsheet ID is
+// provided. Then open the spreadsheet in the browser.
+pub fn write_spreadsheet(
+    spreadsheet_id: Option<&str>,
+    spreadsheet: Spreadsheet,
+) -> anyhow::Result<String> {
+    let (id, url) = run_with_credentials(|token| {
+        let spreadsheet = spreadsheet.clone();
+        if let Some(spreadsheet_id) = spreadsheet_id {
+            update_spreadsheet(&token, spreadsheet_id, spreadsheet)
+                .map(|url| (spreadsheet_id.to_owned(), url))
+        } else {
+            create_spreadsheet(&token, spreadsheet)
+        }
+    })?;
+    utils::open_url(url.as_str());
+    Ok(id)
 }
