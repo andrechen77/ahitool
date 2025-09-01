@@ -154,6 +154,7 @@ pub struct Job {
     pub status: Status,
     pub status_mod_date: Timestamp,
     pub sales_rep: Option<String>,
+    pub branch: Option<i64>,
     pub state: Option<String>,
     pub insurance_checkbox: bool,
     pub insurance_claim_number: Option<String>,
@@ -396,6 +397,12 @@ impl TryFrom<serde_json::Value> for Job {
         let job_name = get_owned_nonempty(&map, KEY_JOB_NAME);
         let lead_source = get_owned_nonempty(&map, KEY_LEAD_SOURCE);
 
+        let branch = map
+            .get("location")
+            .and_then(|val| val.as_object())
+            .and_then(|obj| obj.get("id"))
+            .and_then(|val| val.as_i64());
+
         let status: Status = if let Some(s) = map.get(KEY_STATUS_NAME).and_then(|v| v.as_str()) {
             s.into()
         } else {
@@ -436,6 +443,7 @@ impl TryFrom<serde_json::Value> for Job {
             jnid,
             sales_rep,
             state,
+            branch,
             status,
             status_mod_date,
             insurance_checkbox,
@@ -479,6 +487,7 @@ mod test {
             jnid: "0".to_owned(),
             sales_rep: None,
             state: None,
+            branch: None,
             status: Status::JobsInProgress, // arbitrary choice that shouldn't matter for tests
             status_mod_date: dt(0),
             insurance_checkbox: insurance,
@@ -709,6 +718,7 @@ mod test {
             jnid: "0".to_owned(),
             sales_rep: None,
             state: None,
+            branch: None,
             status: Status::JobsInProgress, // arbitrary; shouldn't affect tests
             status_mod_date: dt(0),
             insurance_checkbox: false,
