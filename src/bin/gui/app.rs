@@ -113,5 +113,6 @@ impl MainApp {
         self.job_nimbus_client.on_exit();
         self.kpi_page_state.on_exit();
         self.ar_page_state.on_exit();
+        self.all_jobs_page_state.on_exit();
     }
 }

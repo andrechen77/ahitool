@@ -32,6 +32,7 @@ pub fn generate_all_jobs_google_sheets(
         ExtendedValue::StringValue("JNID".to_string()),
         ExtendedValue::StringValue("Job Number".to_string()),
         ExtendedValue::StringValue("Sales Rep".to_string()),
+        ExtendedValue::StringValue("State".to_string()),
         ExtendedValue::StringValue("Status".to_string()),
         ExtendedValue::StringValue("Lead Source".to_string()),
     ]));
@@ -40,6 +41,7 @@ pub fn generate_all_jobs_google_sheets(
             ExtendedValue::StringValue(job.jnid.clone()),
             ExtendedValue::StringValue(job.job_number.clone().unwrap_or_default()),
             ExtendedValue::StringValue(job.sales_rep.clone().unwrap_or_default()),
+            ExtendedValue::StringValue(job.state.clone().unwrap_or_default()),
             ExtendedValue::StringValue(job.status.to_string()),
             ExtendedValue::StringValue(job.lead_source.clone().unwrap_or_default()),
         ]));

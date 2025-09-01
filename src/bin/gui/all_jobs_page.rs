@@ -66,7 +66,12 @@ impl AllJobsPage {
             let new_spreadsheet_id = tools::all_jobs::generate_all_jobs_google_sheets(
                 jn_data.jobs.iter().cloned(),
                 spreadsheet_id.as_deref(),
-            );
+            )
+            .inspect_err(|err| {
+                warn!("Error exporting to Google Sheets: {}", err);
+            })
+            .ok();
+            let _ = export_complete_tx.send(new_spreadsheet_id);
         });
     }
 
