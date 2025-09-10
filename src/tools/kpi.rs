@@ -43,11 +43,10 @@ pub struct KpiData {
 pub fn calculate_kpi<'a>(
     jobs: impl IntoIterator<Item = Arc<Job>>,
     date_range: DateRange,
-    unsettled_date: Timestamp,
     abandon_date: Timestamp,
 ) -> KpiData {
     let (trackers_by_rep, red_flags_by_rep, unsettled_jobs, abandoned_jobs, milestoneless_jobs) =
-        processing::process_jobs(jobs.into_iter(), date_range, unsettled_date, abandon_date);
+        processing::process_jobs(jobs.into_iter(), date_range, abandon_date);
     let stats_by_rep: BTreeMap<_, _> = trackers_by_rep
         .into_iter()
         .map(|(rep, tracker)| (rep, processing::calculate_job_tracker_stats(&tracker)))
@@ -86,15 +85,12 @@ mod processing {
     /// Any errors in the job data are returned in the red flags.
     pub fn process_jobs(
         jobs: impl Iterator<Item = Arc<Job>>,
-        date_range: DateRange,
-        // If provided, any unsettled jobs whose last update was before this
-        // date are marked as such.
-        unsettled_date: Timestamp,
+        settled_date_range: DateRange,
         // If provided, any abandoned jobs whose last update was before this
         // date are marked as such.
         abandon_date: Timestamp,
     ) -> ProcessJobsResult {
-        let DateRange { from_date, to_date } = date_range;
+        let DateRange { from_date, to_date } = settled_date_range;
         info!(
             "Processing jobs settled between {} and {}",
             from_date.map(|dt| dt.to_string()).as_deref().unwrap_or("the beginning of time"),

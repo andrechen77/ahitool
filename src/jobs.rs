@@ -5,6 +5,7 @@ use tracing::warn;
 
 const KEY_JNID: &str = "jnid";
 const KEY_SALES_REP: &str = "sales_rep_name";
+const KEY_CREATED_DATE: &str = "date_created";
 const KEY_STATE: &str = "state_text";
 const KEY_INSURANCE_CHECKBOX: &str = "Insurance Job?";
 const KEY_INSURANCE_COMPANY_NAME: &str = "Insurance Company";
@@ -150,6 +151,7 @@ impl Display for Status {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Job {
     pub jnid: String,
+    pub created_date: Timestamp,
     pub milestone_dates: MilestoneDates,
     pub status: Status,
     pub status_mod_date: Timestamp,
@@ -429,6 +431,11 @@ impl TryFrom<serde_json::Value> for Job {
                 .map(|dt| dt.with_time(NaiveTime::MIN).unwrap())
         }
 
+        let created_date = get_timestamp_nonzero(&map, KEY_CREATED_DATE).unwrap_or_else(|| {
+            warn!("No created date found for job {}. Defaulting to the current date for now", jnid);
+            Utc::now()
+        });
+
         // extract all the milestone dates
         let appointment_date = get_timestamp_nonzero(&map, KEY_APPOINTMENT_DATE);
         let contingency_date = get_timestamp_nonzero(&map, KEY_CONTINGENCY_DATE);
@@ -441,6 +448,7 @@ impl TryFrom<serde_json::Value> for Job {
 
         Ok(Job {
             jnid,
+            created_date,
             sales_rep,
             state,
             branch,
@@ -485,6 +493,7 @@ mod test {
     ) -> Arc<Job> {
         Arc::new(Job {
             jnid: "0".to_owned(),
+            created_date: dt(0),
             sales_rep: None,
             state: None,
             branch: None,
@@ -716,6 +725,7 @@ mod test {
     fn job_analysis_inconsistent_insurance_info() {
         let job = Arc::new(Job {
             jnid: "0".to_owned(),
+            created_date: dt(0),
             sales_rep: None,
             state: None,
             branch: None,

@@ -19,10 +19,14 @@ use crate::{
 pub struct KpiPage {
     pub selected_rep: Option<KpiSubject>,
     pub spreadsheet_id: FileBacked<String>,
-    /// The current value of the date range dropdown selector.
-    date_range_option: (DateRangeOption, DateRangeOption),
-    /// The current value of the date range custom date fields.
-    date_range_custom: (String, String),
+    /// The current value of the settled date range dropdown selector.
+    settled_date_range_option: (DateRangeOption, DateRangeOption),
+    /// The current value of the settled date range custom date fields.
+    settled_date_range_custom: (String, String),
+    /// The current value of the created date range dropdown selector.
+    created_date_range_option: (DateRangeOption, DateRangeOption),
+    /// The current value of the created date range custom date fields.
+    created_date_range_custom: (String, String),
     /// The currently selected values of the lead source dropdown.
     lead_sources: HashSet<String>,
     /// The current value of the branch dropdown selector
@@ -38,8 +42,10 @@ impl KpiPage {
         Self {
             selected_rep: None,
             spreadsheet_id,
-            date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
-            date_range_custom: (String::new(), String::new()),
+            settled_date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
+            settled_date_range_custom: (String::new(), String::new()),
+            created_date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
+            created_date_range_custom: (String::new(), String::new()),
             lead_sources: HashSet::new(),
             branch: None,
             kpi_data: DataLoader::new(None),
@@ -53,47 +59,91 @@ impl KpiPage {
             ui.heading("Calculate Key Performance Indicators");
 
             if let Some(jn_data) = jn_client.get_data().as_ref() {
-                egui::ComboBox::from_label("From date")
-                    .selected_text(self.date_range_option.0.to_str())
+                egui::ComboBox::from_label("From date settled")
+                    .selected_text(self.settled_date_range_option.0.to_str())
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.date_range_option.0,
+                            &mut self.settled_date_range_option.0,
                             DateRangeOption::Forever,
                             DateRangeOption::Forever.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.date_range_option.0,
+                            &mut self.settled_date_range_option.0,
                             DateRangeOption::StartOfYear,
                             DateRangeOption::StartOfYear.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.date_range_option.0,
+                            &mut self.settled_date_range_option.0,
                             DateRangeOption::Custom,
                             DateRangeOption::Custom.to_str(),
                         );
                     });
-                if self.date_range_option.0 == DateRangeOption::Custom {
+                if self.settled_date_range_option.0 == DateRangeOption::Custom {
                     ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.date_range_custom.0);
+                        ui.text_edit_singleline(&mut self.settled_date_range_custom.0);
                     });
                 }
-                egui::ComboBox::from_label("To date")
-                    .selected_text(self.date_range_option.1.to_str())
+                egui::ComboBox::from_label("To date settled")
+                    .selected_text(self.settled_date_range_option.1.to_str())
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.date_range_option.1,
+                            &mut self.settled_date_range_option.1,
                             DateRangeOption::Today,
                             DateRangeOption::Today.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.date_range_option.1,
+                            &mut self.settled_date_range_option.1,
                             DateRangeOption::Custom,
                             DateRangeOption::Custom.to_str(),
                         );
                     });
-                if self.date_range_option.1 == DateRangeOption::Custom {
+                if self.settled_date_range_option.1 == DateRangeOption::Custom {
                     ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.date_range_custom.1);
+                        ui.text_edit_singleline(&mut self.settled_date_range_custom.1);
+                    });
+                }
+
+                egui::ComboBox::from_label("From date created")
+                    .selected_text(self.created_date_range_option.0.to_str())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.created_date_range_option.0,
+                            DateRangeOption::Forever,
+                            DateRangeOption::Forever.to_str(),
+                        );
+                        ui.selectable_value(
+                            &mut self.created_date_range_option.0,
+                            DateRangeOption::StartOfYear,
+                            DateRangeOption::StartOfYear.to_str(),
+                        );
+                        ui.selectable_value(
+                            &mut self.created_date_range_option.0,
+                            DateRangeOption::Custom,
+                            DateRangeOption::Custom.to_str(),
+                        );
+                    });
+                if self.created_date_range_option.0 == DateRangeOption::Custom {
+                    ui.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut self.created_date_range_custom.0);
+                    });
+                }
+                egui::ComboBox::from_label("To date created")
+                    .selected_text(self.created_date_range_option.1.to_str())
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(
+                            &mut self.created_date_range_option.1,
+                            DateRangeOption::Today,
+                            DateRangeOption::Today.to_str(),
+                        );
+                        ui.selectable_value(
+                            &mut self.created_date_range_option.1,
+                            DateRangeOption::Custom,
+                            DateRangeOption::Custom.to_str(),
+                        );
+                    });
+                if self.created_date_range_option.1 == DateRangeOption::Custom {
+                    ui.horizontal(|ui| {
+                        ui.text_edit_singleline(&mut self.created_date_range_custom.1);
                     });
                 }
 
@@ -183,7 +233,14 @@ impl KpiPage {
     }
 
     fn start_calculate(&mut self, jn_data: Arc<JobNimbusData>) {
-        let date_range = match self.get_date_range() {
+        let settled_date_range = match self.get_settled_date_range() {
+            Ok(date_range) => date_range,
+            Err(e) => {
+                warn!("error parsing date range: {}", e);
+                return;
+            }
+        };
+        let created_date_range = match self.get_created_date_range() {
             Ok(date_range) => date_range,
             Err(e) => {
                 warn!("error parsing date range: {}", e);
@@ -206,22 +263,37 @@ impl KpiPage {
                             .filter(|&s| lead_source_filter.contains(s))
                             .is_some()
                 })
-                .filter(|job| branch_filter.is_none() || job.state == branch_filter);
-            let unsettled_date = chrono::Local::now().to_utc();
+                .filter(|job| branch_filter.is_none() || job.state == branch_filter)
+                .filter(|job| {
+                    let DateRange { from_date, to_date } = created_date_range;
+                    Some(job.created_date) >= from_date
+                        && (to_date.is_none() || job.created_date <= to_date.unwrap())
+                });
             let abandon_date = chrono::Local::now().to_utc() - chrono::Duration::days(60);
-            let kpi_data =
-                tools::kpi::calculate_kpi(jobs, date_range, unsettled_date, abandon_date);
+            let kpi_data = tools::kpi::calculate_kpi(jobs, settled_date_range, abandon_date);
             let _ = kpi_data_tx.send(Some(Arc::new(kpi_data)));
         });
     }
 
-    fn get_date_range(&self) -> anyhow::Result<DateRange> {
-        let from_text = match self.date_range_option.0 {
-            DateRangeOption::Custom => &self.date_range_custom.0,
+    fn get_settled_date_range(&self) -> anyhow::Result<DateRange> {
+        let from_text = match self.settled_date_range_option.0 {
+            DateRangeOption::Custom => &self.settled_date_range_custom.0,
             preset => preset.to_str(),
         };
-        let to_text = match self.date_range_option.1 {
-            DateRangeOption::Custom => &self.date_range_custom.1,
+        let to_text = match self.settled_date_range_option.1 {
+            DateRangeOption::Custom => &self.settled_date_range_custom.1,
+            preset => preset.to_str(),
+        };
+        DateRange::from_strs(from_text, to_text)
+    }
+
+    fn get_created_date_range(&self) -> anyhow::Result<DateRange> {
+        let from_text = match self.created_date_range_option.0 {
+            DateRangeOption::Custom => &self.created_date_range_custom.0,
+            preset => preset.to_str(),
+        };
+        let to_text = match self.created_date_range_option.1 {
+            DateRangeOption::Custom => &self.created_date_range_custom.1,
             preset => preset.to_str(),
         };
         DateRange::from_strs(from_text, to_text)
