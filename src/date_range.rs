@@ -12,6 +12,8 @@ pub struct DateRange {
     pub to_date: Option<Timestamp>,
 }
 
+const DATE_FORMAT: &str = "%Y-%m-%d";
+
 impl DateRange {
     pub const ALL_TIME: Self = Self { from_date: None, to_date: None };
 
@@ -21,7 +23,7 @@ impl DateRange {
             "Start-of-year" => Some(start_of_year()),
             "Today" => Some(Utc::now()),
             date_string => {
-                let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
+                let date = NaiveDate::parse_from_str(date_string, DATE_FORMAT)
                     .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
                 if let Ok(date) = date {
                     Some(date)
