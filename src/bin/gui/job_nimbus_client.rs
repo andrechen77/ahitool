@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::BTreeSet,
     sync::{Arc, MutexGuard},
     thread,
 };
@@ -13,7 +13,7 @@ use crate::data_loader::DataLoader;
 pub struct JobNimbusData {
     pub fetched: DateTime<Utc>,
     pub jobs: Vec<Arc<Job>>,
-    pub lead_sources: HashSet<String>,
+    pub lead_sources: BTreeSet<String>,
 }
 
 pub struct JobNimbusClient {

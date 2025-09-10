@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc, thread};
+use std::{collections::BTreeSet, sync::Arc, thread};
 
 use ahitool::{
     date_range::DateRange,
@@ -28,7 +28,7 @@ pub struct KpiPage {
     /// The current value of the created date range custom date fields.
     created_date_range_custom: (String, String),
     /// The currently selected values of the lead source dropdown.
-    lead_sources: HashSet<String>,
+    lead_sources: BTreeSet<String>,
     /// The current value of the branch dropdown selector
     branch: Option<String>,
     kpi_data: DataLoader<Option<Arc<KpiData>>>,
@@ -46,7 +46,7 @@ impl KpiPage {
             settled_date_range_custom: (String::new(), String::new()),
             created_date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
             created_date_range_custom: (String::new(), String::new()),
-            lead_sources: HashSet::new(),
+            lead_sources: BTreeSet::new(),
             branch: None,
             kpi_data: DataLoader::new(None),
             export_data: DataLoader::new(None),
