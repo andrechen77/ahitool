@@ -7,7 +7,7 @@ use crate::data_loader::DataLoader;
 
 #[derive(Default)]
 pub struct UpdatePage {
-    updating: DataLoader<()>,
+    updating: DataLoader<bool>,
 }
 
 impl UpdatePage {
@@ -16,13 +16,20 @@ impl UpdatePage {
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) {
-        let in_progress = self.updating.fetch_in_progress();
-        let button = ui.add_enabled(!in_progress, egui::Button::new("Download and install update"));
-        if in_progress {
-            ui.label("Updating...");
+        if *self.updating.get_mut() {
+            // already updated, so show a message to restart
+            ui.label("Update complete. Please restart the application.");
+            return;
         } else {
-            if button.clicked() {
-                self.start_update();
+            let in_progress = self.updating.fetch_in_progress();
+            let button =
+                ui.add_enabled(!in_progress, egui::Button::new("Download and install update"));
+            if in_progress {
+                ui.label("Updating...");
+            } else {
+                if button.clicked() {
+                    self.start_update();
+                }
             }
         }
     }
@@ -36,7 +43,7 @@ impl UpdatePage {
             } else {
                 info!("Successfully updated executable");
             }
-            let _ = completion_tx.send(());
+            let _ = completion_tx.send(true);
         });
     }
 }
