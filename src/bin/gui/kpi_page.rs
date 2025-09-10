@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread};
+use std::{collections::HashSet, sync::Arc, thread};
 
 use ahitool::{
     date_range::DateRange,
@@ -8,6 +8,7 @@ use ahitool::{
     },
     utils::FileBacked,
 };
+use egui::PopupCloseBehavior;
 use tracing::warn;
 
 use crate::{
@@ -22,8 +23,8 @@ pub struct KpiPage {
     date_range_option: (DateRangeOption, DateRangeOption),
     /// The current value of the date range custom date fields.
     date_range_custom: (String, String),
-    /// The current value of the lead source dropdown selector.
-    lead_source_option: Option<String>,
+    /// The currently selected values of the lead source dropdown.
+    lead_sources: HashSet<String>,
     /// The current value of the branch dropdown selector
     branch: Option<String>,
     kpi_data: DataLoader<Option<Arc<KpiData>>>,
@@ -39,7 +40,7 @@ impl KpiPage {
             spreadsheet_id,
             date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
             date_range_custom: (String::new(), String::new()),
-            lead_source_option: None,
+            lead_sources: HashSet::new(),
             branch: None,
             kpi_data: DataLoader::new(None),
             export_data: DataLoader::new(None),
@@ -105,15 +106,26 @@ impl KpiPage {
                     });
 
                 egui::ComboBox::from_label("Filter by lead source")
-                    .selected_text(self.lead_source_option.as_deref().unwrap_or("All sources"))
+                    .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
+                    .selected_text(if self.lead_sources.is_empty() {
+                        "All sources".to_string()
+                    } else {
+                        self.lead_sources.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.lead_source_option, None, "All sources");
+                        let mut all_sources = self.lead_sources.is_empty();
+                        if ui.checkbox(&mut all_sources, "All sources").clicked() {
+                            self.lead_sources.clear();
+                        }
                         for lead_source in &jn_data.lead_sources {
-                            ui.selectable_value(
-                                &mut self.lead_source_option,
-                                Some(lead_source.clone()),
-                                lead_source,
-                            );
+                            let mut selected = self.lead_sources.contains(lead_source);
+                            if ui.checkbox(&mut selected, lead_source).clicked() {
+                                if selected {
+                                    self.lead_sources.insert(lead_source.clone());
+                                } else {
+                                    self.lead_sources.remove(lead_source);
+                                }
+                            }
                         }
                     });
 
@@ -179,14 +191,21 @@ impl KpiPage {
             }
         };
         let kpi_data_tx = self.kpi_data.start_fetch();
-        let lead_source_filter = self.lead_source_option.clone();
+        let lead_source_filter = self.lead_sources.clone();
         let branch_filter = self.branch.clone();
         thread::spawn(move || {
             let jobs = jn_data
                 .jobs
                 .iter()
                 .cloned()
-                .filter(|job| lead_source_filter.is_none() || job.lead_source == lead_source_filter)
+                .filter(|job| {
+                    lead_source_filter.is_empty()
+                        || job
+                            .lead_source
+                            .as_ref()
+                            .filter(|&s| lead_source_filter.contains(s))
+                            .is_some()
+                })
                 .filter(|job| branch_filter.is_none() || job.state == branch_filter);
             let unsettled_date = chrono::Local::now().to_utc();
             let abandon_date = chrono::Local::now().to_utc() - chrono::Duration::days(60);
