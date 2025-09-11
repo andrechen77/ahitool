@@ -28,7 +28,7 @@ pub enum AhitoolTool {
 
 impl MainApp {
     pub fn with_cached_storage() -> Self {
-        Self {
+        let mut new = Self {
             kpi_page_state: KpiPage::new(FileBacked::new_from_file_or(
                 "kpi_spreadsheet_id.json",
                 || String::new(),
@@ -48,7 +48,9 @@ impl MainApp {
             debug_print: DebugPrint::new(),
             update_page_state: UpdatePage::new(),
             current_tool: AhitoolTool::None,
-        }
+        };
+        new.job_nimbus_client.start_fetch();
+        new
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) {

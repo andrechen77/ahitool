@@ -69,7 +69,7 @@ impl JobNimbusClient {
 
     /// Starts a fetch running on a separate thread. The data will be available
     /// in `self.data`.
-    fn start_fetch(&mut self) {
+    pub fn start_fetch(&mut self) {
         // Clone all the data we need up front, so that the resulting future
         // has no lifetime dependencies on self.
         let data_tx = self.data.start_fetch();
