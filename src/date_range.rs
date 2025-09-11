@@ -12,7 +12,7 @@ pub struct DateRange {
     pub to_date: Option<Timestamp>,
 }
 
-const DATE_FORMAT: &str = "%Y-%m-%d";
+const DATE_FORMATS: [&str; 2] = ["%m/%d/%y", "%m/%d/%Y"];
 
 impl DateRange {
     pub const ALL_TIME: Self = Self { from_date: None, to_date: None };
@@ -23,12 +23,14 @@ impl DateRange {
             "Start-of-year" => Some(start_of_year()),
             "Today" => Some(Utc::now()),
             date_string => {
-                let date = NaiveDate::parse_from_str(date_string, DATE_FORMAT)
+                let date = DATE_FORMATS
+                    .iter()
+                    .find_map(|format| NaiveDate::parse_from_str(date_string, format).ok())
                     .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
-                if let Ok(date) = date {
+                if let Some(date) = date {
                     Some(date)
                 } else {
-                    bail!("invalid date format \"{date_string}\". Use 'Forever', 'Start-of-year', 'Today', or '%Y-%m-%d'");
+                    bail!("invalid date format \"{date_string}\". Use 'Forever', 'Start-of-year', 'Today', or '{}'", DATE_FORMATS.join(" or "));
                 }
             }
         };
@@ -37,12 +39,14 @@ impl DateRange {
             "Start-of-year" => Some(start_of_year()),
             "Today" => Some(Utc::now()),
             date_string => {
-                let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d")
+                let date = DATE_FORMATS
+                    .iter()
+                    .find_map(|format| NaiveDate::parse_from_str(date_string, format).ok())
                     .map(|date| Utc.from_utc_datetime(&NaiveDateTime::new(date, NaiveTime::MIN)));
-                if let Ok(date) = date {
+                if let Some(date) = date {
                     Some(date)
                 } else {
-                    bail!("invalid date format \"{date_string}\". Use 'Forever', 'Start-of-year', 'Today', or '%Y-%m-%d'");
+                    bail!("invalid date format \"{date_string}\". Use 'Forever', 'Start-of-year', 'Today', or '{}'", DATE_FORMATS.join(" or "));
                 }
             }
         };

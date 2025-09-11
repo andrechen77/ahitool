@@ -410,7 +410,7 @@ impl DateRangeOption {
             Self::Forever => "Forever",
             Self::StartOfYear => "Start-of-year",
             Self::Today => "Today",
-            Self::Custom => "Custom (YYYY-mm-dd)",
+            Self::Custom => "Custom (mm/dd/yy or mm/dd/yyyy)",
         }
     }
 }
