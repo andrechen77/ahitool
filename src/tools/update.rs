@@ -1,3 +1,5 @@
+use std::env;
+
 use http::header::USER_AGENT;
 use tracing::info;
 
@@ -60,4 +62,10 @@ pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
 
     info!("Updated executable to version {}", version_tag);
     Ok(())
+}
+
+pub fn restart_self() -> std::io::Result<()> {
+    let current_exe = env::current_exe()?;
+    let _ = std::process::Command::new(&current_exe).args(env::args().skip(1)).spawn()?;
+    std::process::exit(0);
 }
