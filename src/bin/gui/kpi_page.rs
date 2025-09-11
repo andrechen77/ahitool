@@ -20,11 +20,11 @@ pub struct KpiPage {
     pub selected_rep: Option<KpiSubject>,
     pub spreadsheet_id: FileBacked<String>,
     /// The current value of the settled date range dropdown selector.
-    settled_date_range_option: (DateRangeOption, DateRangeOption),
+    settled_date_range_option: DateRangeOption,
     /// The current value of the settled date range custom date fields.
     settled_date_range_custom: (String, String),
     /// The current value of the created date range dropdown selector.
-    created_date_range_option: (DateRangeOption, DateRangeOption),
+    created_date_range_option: DateRangeOption,
     /// The current value of the created date range custom date fields.
     created_date_range_custom: (String, String),
     /// The currently selected values of the lead source dropdown.
@@ -42,9 +42,9 @@ impl KpiPage {
         Self {
             selected_rep: None,
             spreadsheet_id,
-            settled_date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
+            settled_date_range_option: DateRangeOption::Forever,
             settled_date_range_custom: (String::new(), String::new()),
-            created_date_range_option: (DateRangeOption::Forever, DateRangeOption::Today),
+            created_date_range_option: DateRangeOption::Forever,
             created_date_range_custom: (String::new(), String::new()),
             lead_sources: BTreeSet::new(),
             branch: None,
@@ -59,91 +59,81 @@ impl KpiPage {
             ui.heading("Calculate Key Performance Indicators");
 
             if let Some(jn_data) = jn_client.get_data().as_ref() {
-                egui::ComboBox::from_label("From date settled")
-                    .selected_text(self.settled_date_range_option.0.to_str())
+                egui::ComboBox::from_label("Range for date settled")
+                    .selected_text(self.settled_date_range_option.to_str())
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.settled_date_range_option.0,
+                            &mut self.settled_date_range_option,
                             DateRangeOption::Forever,
                             DateRangeOption::Forever.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.settled_date_range_option.0,
-                            DateRangeOption::StartOfYear,
-                            DateRangeOption::StartOfYear.to_str(),
+                            &mut self.settled_date_range_option,
+                            DateRangeOption::LastYear,
+                            DateRangeOption::LastYear.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.settled_date_range_option.0,
+                            &mut self.settled_date_range_option,
+                            DateRangeOption::YearToDate,
+                            DateRangeOption::YearToDate.to_str(),
+                        );
+                        ui.selectable_value(
+                            &mut self.settled_date_range_option,
                             DateRangeOption::Custom,
                             DateRangeOption::Custom.to_str(),
                         );
                     });
-                if self.settled_date_range_option.0 == DateRangeOption::Custom {
+                if self.settled_date_range_option == DateRangeOption::Custom {
                     ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.settled_date_range_custom.0);
-                    });
-                }
-                egui::ComboBox::from_label("To date settled")
-                    .selected_text(self.settled_date_range_option.1.to_str())
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.settled_date_range_option.1,
-                            DateRangeOption::Today,
-                            DateRangeOption::Today.to_str(),
-                        );
-                        ui.selectable_value(
-                            &mut self.settled_date_range_option.1,
-                            DateRangeOption::Custom,
-                            DateRangeOption::Custom.to_str(),
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.settled_date_range_custom.0)
+                                .hint_text("From date (month/day/year)"),
                         );
                     });
-                if self.settled_date_range_option.1 == DateRangeOption::Custom {
                     ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.settled_date_range_custom.1);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.settled_date_range_custom.1)
+                                .hint_text("To date (month/day/year)"),
+                        );
                     });
                 }
 
-                egui::ComboBox::from_label("From date created")
-                    .selected_text(self.created_date_range_option.0.to_str())
+                egui::ComboBox::from_label("Range for date created")
+                    .selected_text(self.created_date_range_option.to_str())
                     .show_ui(ui, |ui| {
                         ui.selectable_value(
-                            &mut self.created_date_range_option.0,
+                            &mut self.created_date_range_option,
                             DateRangeOption::Forever,
                             DateRangeOption::Forever.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.created_date_range_option.0,
-                            DateRangeOption::StartOfYear,
-                            DateRangeOption::StartOfYear.to_str(),
+                            &mut self.created_date_range_option,
+                            DateRangeOption::LastYear,
+                            DateRangeOption::LastYear.to_str(),
                         );
                         ui.selectable_value(
-                            &mut self.created_date_range_option.0,
+                            &mut self.created_date_range_option,
+                            DateRangeOption::YearToDate,
+                            DateRangeOption::YearToDate.to_str(),
+                        );
+                        ui.selectable_value(
+                            &mut self.created_date_range_option,
                             DateRangeOption::Custom,
                             DateRangeOption::Custom.to_str(),
                         );
                     });
-                if self.created_date_range_option.0 == DateRangeOption::Custom {
+                if self.created_date_range_option == DateRangeOption::Custom {
                     ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.created_date_range_custom.0);
-                    });
-                }
-                egui::ComboBox::from_label("To date created")
-                    .selected_text(self.created_date_range_option.1.to_str())
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.created_date_range_option.1,
-                            DateRangeOption::Today,
-                            DateRangeOption::Today.to_str(),
-                        );
-                        ui.selectable_value(
-                            &mut self.created_date_range_option.1,
-                            DateRangeOption::Custom,
-                            DateRangeOption::Custom.to_str(),
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.created_date_range_custom.0)
+                                .hint_text("From date (month/day/year)"),
                         );
                     });
-                if self.created_date_range_option.1 == DateRangeOption::Custom {
                     ui.horizontal(|ui| {
-                        ui.text_edit_singleline(&mut self.created_date_range_custom.1);
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.created_date_range_custom.1)
+                                .hint_text("To date (month/day/year)"),
+                        );
                     });
                 }
 
@@ -276,27 +266,27 @@ impl KpiPage {
     }
 
     fn get_settled_date_range(&self) -> anyhow::Result<DateRange> {
-        let from_text = match self.settled_date_range_option.0 {
-            DateRangeOption::Custom => &self.settled_date_range_custom.0,
-            preset => preset.to_str(),
-        };
-        let to_text = match self.settled_date_range_option.1 {
-            DateRangeOption::Custom => &self.settled_date_range_custom.1,
-            preset => preset.to_str(),
-        };
-        DateRange::from_strs(from_text, to_text)
+        match self.settled_date_range_option {
+            DateRangeOption::Forever => Ok(DateRange::ALL_TIME),
+            DateRangeOption::LastYear => Ok(DateRange::last_year()),
+            DateRangeOption::YearToDate => Ok(DateRange::year_to_date()),
+            DateRangeOption::Custom => DateRange::from_strs(
+                &self.settled_date_range_custom.0,
+                &self.settled_date_range_custom.1,
+            ),
+        }
     }
 
     fn get_created_date_range(&self) -> anyhow::Result<DateRange> {
-        let from_text = match self.created_date_range_option.0 {
-            DateRangeOption::Custom => &self.created_date_range_custom.0,
-            preset => preset.to_str(),
-        };
-        let to_text = match self.created_date_range_option.1 {
-            DateRangeOption::Custom => &self.created_date_range_custom.1,
-            preset => preset.to_str(),
-        };
-        DateRange::from_strs(from_text, to_text)
+        match self.created_date_range_option {
+            DateRangeOption::Forever => Ok(DateRange::ALL_TIME),
+            DateRangeOption::LastYear => Ok(DateRange::last_year()),
+            DateRangeOption::YearToDate => Ok(DateRange::year_to_date()),
+            DateRangeOption::Custom => DateRange::from_strs(
+                &self.created_date_range_custom.0,
+                &self.created_date_range_custom.1,
+            ),
+        }
     }
 
     fn start_generate_google_sheets(
@@ -399,8 +389,8 @@ fn render_kpi_stats_table(ui: &mut egui::Ui, stats: &JobTrackerStats) {
 enum DateRangeOption {
     #[default]
     Forever,
-    StartOfYear,
-    Today,
+    LastYear,
+    YearToDate,
     Custom,
 }
 
@@ -408,9 +398,9 @@ impl DateRangeOption {
     const fn to_str(self) -> &'static str {
         match self {
             Self::Forever => "Forever",
-            Self::StartOfYear => "Start-of-year",
-            Self::Today => "Today",
-            Self::Custom => "Custom (mm/dd/yy or mm/dd/yyyy)",
+            Self::LastYear => "Last Year",
+            Self::YearToDate => "Year-to-date",
+            Self::Custom => "Custom",
         }
     }
 }
