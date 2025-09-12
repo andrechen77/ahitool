@@ -49,7 +49,7 @@ pub fn get_all_jobs_from_job_nimbus(
     // make a request to actually get those jobs
     let response = request_from_job_nimbus(api_key, count, filter)?;
     let response: ApiResponse = response.into_json()?;
-    info!("Recieved {} jobs from JobNimbus", response.count);
+    info!("Received {} jobs from JobNimbus", response.count);
     assert_eq!(response.count as usize, count);
 
     Ok(response.results.into_iter().filter_map(|v| {
