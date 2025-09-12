@@ -293,6 +293,7 @@ pub mod output {
     };
 
     use chrono::Utc;
+    use tracing::{info, trace};
 
     use crate::{
         apis::google_sheets::{
@@ -640,6 +641,7 @@ pub mod output {
     pub fn generate_report_google_sheets(
         kpi_data: &KpiData,
         spreadsheet_id: Option<&str>,
+        additional_sheets: Vec<(String, Vec<Vec<String>>)>,
     ) -> anyhow::Result<String> {
         fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
             RowData {
@@ -795,6 +797,24 @@ pub mod output {
             "Milestoneless Jobs".to_string(),
             milestoneless_jobs.iter().cloned(),
         ));
+
+        // create the additional sheets
+        for (sheet_name, sheet_contents) in additional_sheets {
+            let mut rows = Vec::new();
+            for row in sheet_contents {
+                rows.push(mk_row(row.into_iter().map(|s| ExtendedValue::StringValue(s))));
+            }
+            let sheet = Sheet {
+                properties: SheetProperties {
+                    title: Some(sheet_name),
+                    grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+                    ..Default::default()
+                },
+                data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
+                ..Default::default()
+            };
+            sheets.push(sheet);
+        }
 
         // create the spreadsheet
         let spreadsheet = Spreadsheet {

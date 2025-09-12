@@ -9,7 +9,7 @@ use ahitool::{
     utils::FileBacked,
 };
 use egui::PopupCloseBehavior;
-use tracing::warn;
+use tracing::{info, trace, warn};
 
 use crate::{
     data_loader::DataLoader,
@@ -295,10 +295,37 @@ impl KpiPage {
         spreadsheet_id: Option<String>,
     ) {
         let export_complete_tx = self.export_data.start_fetch();
+        info!("Generating Google Sheets");
+        let mut settings = Vec::new();
+        settings.push(vec![
+            "Date settled range".to_string(),
+            self.settled_date_range_option.to_str().to_owned(),
+            self.settled_date_range_custom.0.clone(),
+            self.settled_date_range_custom.1.clone(),
+        ]);
+        settings.push(vec![
+            "Date created range".to_string(),
+            self.created_date_range_option.to_str().to_owned(),
+            self.created_date_range_custom.0.clone(),
+            self.created_date_range_custom.1.clone(),
+        ]);
+        settings.push(vec![
+            "Branch filter".to_string(),
+            self.branch.as_deref().unwrap_or("All branches").to_owned(),
+        ]);
+        settings.push(vec![
+            "Lead source filter".to_string(),
+            if self.lead_sources.is_empty() {
+                "All sources".to_string()
+            } else {
+                self.lead_sources.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            },
+        ]);
         thread::spawn(move || {
             let new_spreadsheet_id = tools::kpi::output::generate_report_google_sheets(
                 &kpi_data,
                 spreadsheet_id.as_deref(),
+                vec![("Settings".to_string(), settings)],
             )
             .inspect_err(|err| {
                 warn!("Error exporting to Google Sheets: {}", err);
