@@ -307,7 +307,7 @@ pub mod output {
         utils,
     };
 
-    use super::{csv_crate, processing::JobTrackerStats, KpiData, KpiSubject};
+    use super::{KpiData, KpiSubject, csv_crate, processing::JobTrackerStats};
 
     pub mod human {
         use std::collections::btree_map;
@@ -727,10 +727,15 @@ pub mod output {
                 ]));
             }
         }
+        rows.push(mk_row([
+            ExtendedValue::StringValue("".to_string()),
+            ExtendedValue::StringValue("".to_string()),
+            ExtendedValue::StringValue("".to_string()),
+        ]));
         sheets.push(Sheet {
             properties: SheetProperties {
                 title: Some("Red Flags".to_string()),
-                grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+                grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 1 }),
                 ..Default::default()
             },
             data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
@@ -769,10 +774,14 @@ pub mod output {
                     ),
                 ]));
             }
+            rows.push(mk_row(vec![
+                ExtendedValue::StringValue("".to_string());
+                rows[0].values.len()
+            ]));
             Sheet {
                 properties: SheetProperties {
                     title: Some(sheet_name),
-                    grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+                    grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 1 }),
                     ..Default::default()
                 },
                 data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),
@@ -804,10 +813,14 @@ pub mod output {
             for row in sheet_contents {
                 rows.push(mk_row(row.into_iter().map(|s| ExtendedValue::StringValue(s))));
             }
+            rows.push(mk_row(vec![
+                ExtendedValue::StringValue("".to_string());
+                rows[0].values.len()
+            ]));
             let sheet = Sheet {
                 properties: SheetProperties {
                     title: Some(sheet_name),
-                    grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+                    grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 1 }),
                     ..Default::default()
                 },
                 data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),

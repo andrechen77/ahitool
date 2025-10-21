@@ -94,6 +94,8 @@ pub mod update {
             properties: super::SpreadsheetProperties,
             fields: &'static str,
         },
+        #[serde(rename = "updateSheetProperties")]
+        UpdateSheetProperties { properties: super::SheetProperties, fields: &'static str },
         #[serde(rename = "addSheet")]
         AddSheet { properties: super::SheetProperties },
         #[serde(rename = "updateCells")]

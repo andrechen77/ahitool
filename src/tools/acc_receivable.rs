@@ -6,8 +6,8 @@ use crate::{
     apis::google_sheets::{
         self,
         spreadsheet::{
-            CellData, ExtendedValue, GridData, RowData, Sheet, SheetProperties, Spreadsheet,
-            SpreadsheetProperties,
+            CellData, ExtendedValue, GridData, GridProperties, RowData, Sheet, SheetProperties,
+            Spreadsheet, SpreadsheetProperties,
         },
     },
     jobs::{Job, Status},
@@ -168,6 +168,7 @@ pub fn generate_report_google_sheets(
             ]));
         }
     }
+    rows.push(mk_row(vec![ExtendedValue::StringValue("".to_string()); rows[0].values.len()]));
 
     let spreadsheet = Spreadsheet {
         properties: SpreadsheetProperties {
@@ -176,6 +177,7 @@ pub fn generate_report_google_sheets(
         sheets: Some(vec![Sheet {
             properties: SheetProperties {
                 title: Some("Accounts Receivable".to_string()),
+                grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 1 }),
                 ..Default::default()
             },
             data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),

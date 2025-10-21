@@ -106,11 +106,12 @@ pub fn generate_all_jobs_google_sheets(
             ExtendedValue::StringValue((*amt_receivable as f64 / 100.0).to_string()),
         ]));
     }
+    rows.push(mk_row(vec![ExtendedValue::StringValue("".to_string()); rows[0].values.len()]));
 
     let sheet = Sheet {
         properties: SheetProperties {
             title: Some("All Jobs".to_string()),
-            grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 2 }),
+            grid_properties: Some(GridProperties { row_count: rows.len() as u64 + 1 }),
             ..Default::default()
         },
         data: Some(GridData { start_row: 1, start_column: 1, row_data: rows }),

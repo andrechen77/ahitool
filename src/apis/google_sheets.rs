@@ -5,17 +5,17 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use anyhow::anyhow;
-use http::{header::AUTHORIZATION, StatusCode};
-pub use oauth::run_with_credentials;
+use http::{StatusCode, header::AUTHORIZATION};
 pub use oauth::Token;
 use oauth::TryWithCredentialsError;
+pub use oauth::run_with_credentials;
 use oauth2::TokenResponse as _;
 use serde::Deserialize;
 use serde_json::json;
-use spreadsheet::update::Request;
 use spreadsheet::GridCoordinate;
 use spreadsheet::SheetProperties;
 use spreadsheet::Spreadsheet;
+use spreadsheet::update::Request;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
@@ -133,12 +133,18 @@ pub fn update_spreadsheet(
             if sheet.properties.sheet_id.is_some() {
                 warn!("Sheet ID is ignored when updating a spreadsheet");
             }
+
             let sheet_id = if let Some(sheet_id) =
                 title_to_sheet_id.get(sheet.properties.title.as_ref().unwrap())
             {
-                // delete the sheet if it already exists and steal its ID
-                requests.push(Request::DeleteSheet { sheet_id: *sheet_id });
+                // add a request to update the sheet properties; namely the
+                // grid data
+                requests.push(Request::UpdateSheetProperties {
+                    properties: SheetProperties { sheet_id: Some(*sheet_id), ..sheet.properties },
+                    fields: "gridProperties.rowCount",
+                });
                 sheets_to_delete.remove(sheet_id);
+
                 *sheet_id
             } else {
                 // find a sheet ID that is not already in use
@@ -147,13 +153,14 @@ pub fn update_spreadsheet(
                     sheet_id += 1;
                 }
                 existing_sheet_ids.insert(sheet_id);
+
+                // push a request to add a new sheet with the id
+                requests.push(Request::AddSheet {
+                    properties: SheetProperties { sheet_id: Some(sheet_id), ..sheet.properties },
+                });
+
                 sheet_id
             };
-
-            // push a request to add a new sheet with the id
-            requests.push(Request::AddSheet {
-                properties: SheetProperties { sheet_id: Some(sheet_id), ..sheet.properties },
-            });
 
             if let Some(grid_data) = sheet.data {
                 // push a request to update the content of the sheet
@@ -227,7 +234,9 @@ pub fn update_spreadsheet(
                 break 'url spreadsheet_url;
             }
         }
-        warn!("No URL returned in response to updating sheet. Inferring URL from spreadsheet ID and a hardcoded pattern");
+        warn!(
+            "No URL returned in response to updating sheet. Inferring URL from spreadsheet ID and a hardcoded pattern"
+        );
         format!(
             "https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
             spreadsheet_id = spreadsheet_id
