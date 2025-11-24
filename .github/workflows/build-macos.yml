@@ -1,0 +1,30 @@
+name: "Build macOS binary"
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-apple-darwin
+          override: true
+      - name: build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahitool-macos
+          path: target/release/gui
