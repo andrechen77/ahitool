@@ -15,8 +15,11 @@ const ASSET_NAME: Option<&str> = Some("ahitool-win.exe");
 #[cfg(target_os = "linux")]
 const ASSET_NAME: Option<&str> = Some("ahitool-linux");
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const ASSET_NAME: Option<&str> = Some("ahitool-macos");
+
 /// The name of the asset to download.
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "linux", all(target_os = "macos", target_arch = "aarch64"))))]
 const ASSET_NAME: Option<&str> = None;
 
 pub fn update_executable(github_repo: &str) -> anyhow::Result<()> {
