@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use chrono::Utc;
 
@@ -17,6 +17,7 @@ use crate::{
 pub fn generate_all_jobs_google_sheets(
     all_jobs: impl Iterator<Item = Arc<Job>>,
     spreadsheet_id: Option<&str>,
+    oauth_cache_file: &Path,
 ) -> anyhow::Result<String> {
     fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
         RowData {
@@ -124,5 +125,5 @@ pub fn generate_all_jobs_google_sheets(
     };
 
     // generate the spreadsheet
-    google_sheets::write_spreadsheet(spreadsheet_id, spreadsheet)
+    google_sheets::write_spreadsheet(spreadsheet_id, spreadsheet, oauth_cache_file)
 }

@@ -1,4 +1,8 @@
-use std::{sync::Arc, thread};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread,
+};
 
 use ahitool::{
     tools::{self, acc_receivable::AccRecvableData},
@@ -24,7 +28,12 @@ impl ArPage {
         Self { spreadsheet_id, ar_data: DataLoader::new(None), export_data: DataLoader::new(None) }
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        jn_client: &mut JobNimbusClient,
+        oauth_cache_file: &Path,
+    ) {
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| jn_client.render(ui));
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
             ui.heading("Accounts Receivable Report");
@@ -72,7 +81,11 @@ impl ArPage {
                         // stop borrowing self before we borrow it again to
                         // generate the google sheets
                         drop(ar_data);
-                        self.start_generate_google_sheets(data, spreadsheet_id);
+                        self.start_generate_google_sheets(
+                            data,
+                            spreadsheet_id,
+                            oauth_cache_file.to_path_buf(),
+                        );
                     }
                 }
             });
@@ -92,12 +105,14 @@ impl ArPage {
         &mut self,
         ar_data: Arc<AccRecvableData>,
         spreadsheet_id: Option<String>,
+        oauth_cache_file: PathBuf,
     ) {
         let export_data_tx = self.export_data.start_fetch();
         thread::spawn(move || {
             let new_spreadsheet_id = tools::acc_receivable::generate_report_google_sheets(
                 &ar_data,
                 spreadsheet_id.as_deref(),
+                &oauth_cache_file,
             )
             .inspect_err(|e| warn!("Error exporting to Google Sheets: {}", e))
             .ok();

@@ -1,4 +1,8 @@
-use std::{sync::Arc, thread};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread,
+};
 
 use ahitool::{tools, utils::FileBacked};
 use tracing::warn;
@@ -20,7 +24,12 @@ impl AllJobsPage {
         Self { spreadsheet_id, export_data: DataLoader::new(None) }
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        jn_client: &mut JobNimbusClient,
+        oauth_cache_file: &Path,
+    ) {
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| jn_client.render(ui));
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
             ui.heading("Export all jobs to Google Sheets");
@@ -49,7 +58,11 @@ impl AllJobsPage {
                         // stop borrowing self before we borrow it again to
                         // generate the google sheets
                         drop(jn_data);
-                        self.start_generate_google_sheets(data, spreadsheet_id);
+                        self.start_generate_google_sheets(
+                            data,
+                            spreadsheet_id,
+                            oauth_cache_file.to_path_buf(),
+                        );
                     }
                 }
             });
@@ -60,12 +73,14 @@ impl AllJobsPage {
         &mut self,
         jn_data: Arc<JobNimbusData>,
         spreadsheet_id: Option<String>,
+        oauth_cache_file: PathBuf,
     ) {
         let export_complete_tx = self.export_data.start_fetch();
         thread::spawn(move || {
             let new_spreadsheet_id = tools::all_jobs::generate_all_jobs_google_sheets(
                 jn_data.jobs.iter().cloned(),
                 spreadsheet_id.as_deref(),
+                &oauth_cache_file,
             )
             .inspect_err(|err| {
                 warn!("Error exporting to Google Sheets: {}", err);

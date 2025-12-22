@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, sync::Arc};
+use std::{collections::HashMap, io::Write, path::Path, sync::Arc};
 
 use chrono::Utc;
 
@@ -131,6 +131,7 @@ pub fn print_csv(results: &AccRecvableData, writer: impl Write) -> std::io::Resu
 pub fn generate_report_google_sheets(
     results: &AccRecvableData,
     spreadsheet_id: Option<&str>,
+    oauth_cache_file: &Path,
 ) -> anyhow::Result<String> {
     fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
         RowData {
@@ -185,7 +186,7 @@ pub fn generate_report_google_sheets(
         ..Default::default()
     };
 
-    let (id, url) = google_sheets::run_with_credentials(|token| {
+    let (id, url) = google_sheets::run_with_credentials(oauth_cache_file, |token| {
         let spreadsheet = spreadsheet.clone();
         if let Some(spreadsheet_id) = spreadsheet_id {
             google_sheets::update_spreadsheet(&token, spreadsheet_id, spreadsheet)

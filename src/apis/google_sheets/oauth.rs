@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use http::StatusCode;
 use oauth2::basic::BasicTokenResponse;
 use oauth2::{
-    basic::BasicClient, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, Scope,
-    TokenUrl,
+    AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, Scope, TokenUrl,
+    basic::BasicClient,
 };
 use oauth2::{AuthorizationCode, RedirectUrl, RefreshToken, TokenResponse};
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ use crate::utils;
 
 pub type Token = BasicTokenResponse;
 
-const DEFAULT_CACHE_FILE: &str = "google_oauth_token.json";
+// const DEFAULT_CACHE_FILE: &str = "google_oauth_token.json";
 const CLIENT_ID: &str = "859579651850-t212eiscr880fnifmsi6ddft2bhdtplt.apps.googleusercontent.com";
 // It should be fine that the secret is not actually kept secret. see
 // https://developers.google.com/identity/protocols/oauth2
@@ -47,12 +47,10 @@ pub enum TryWithCredentialsError {
 
 /// Runs a function that requires OAuth credentials. If the provided function
 /// returns an error, this is interpreted as the credentials being invalid.
-pub fn run_with_credentials<F, U>(mut function: F) -> anyhow::Result<U>
+pub fn run_with_credentials<F, U>(cache_file: &Path, mut function: F) -> anyhow::Result<U>
 where
     F: FnMut(&Token) -> Result<U, TryWithCredentialsError>,
 {
-    let cache_file = Path::new(DEFAULT_CACHE_FILE);
-
     // attempt to run the function with a cached token
     let expired_token = match get_cached_token(cache_file) {
         Some((cached_token, false)) => {
@@ -303,7 +301,9 @@ fn listen_for_code(tcp_listener: TcpListener, csrf_token: CsrfToken) -> anyhow::
             } else {
                 // the request did not include a valid state, so it must be
                 // rejected
-                warn!("Authorization redirect did not include a valid state. This may be an indication of an attempted attack.");
+                warn!(
+                    "Authorization redirect did not include a valid state. This may be an indication of an attempted attack."
+                );
                 if let Err(e) = req.respond(Response::from_string("Authorization code rejected due to invalid state. Try again or contact the developer.")) {
                     warn!("Failed to respond to request: {}", e);
                 }

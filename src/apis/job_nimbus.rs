@@ -4,8 +4,6 @@ use tracing::{info, warn};
 
 use crate::jobs::Job;
 
-pub const DEFAULT_CACHE_FILE: &str = "job_nimbus_api_key.txt";
-
 const ENDPOINT_JOBS: &str = "https://app.jobnimbus.com/api1/jobs";
 
 fn request_from_job_nimbus(

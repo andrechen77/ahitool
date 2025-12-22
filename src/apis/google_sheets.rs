@@ -3,6 +3,7 @@ pub mod spreadsheet;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::path::Path;
 
 use anyhow::anyhow;
 use http::{StatusCode, header::AUTHORIZATION};
@@ -189,13 +190,6 @@ pub fn update_spreadsheet(
         "responseIncludeGridData": false,
     });
 
-    // Write request body to file for debugging
-    if let Ok(mut file) = std::fs::File::create("google_sheets_request.json") {
-        if let Err(e) = serde_json::to_writer_pretty(&mut file, &request_body) {
-            warn!("Failed to write Google Sheets request to file: {}", e);
-        }
-    }
-
     let url = format!("{ENDPOINT_SPREADSHEETS}/{spreadsheet_id}:batchUpdate");
 
     let response = ureq::post(&url)
@@ -251,8 +245,9 @@ pub fn update_spreadsheet(
 pub fn write_spreadsheet(
     spreadsheet_id: Option<&str>,
     spreadsheet: Spreadsheet,
+    oauth_cache_file: &Path,
 ) -> anyhow::Result<String> {
-    let (id, url) = run_with_credentials(|token| {
+    let (id, url) = run_with_credentials(oauth_cache_file, |token| {
         let spreadsheet = spreadsheet.clone();
         if let Some(spreadsheet_id) = spreadsheet_id {
             update_spreadsheet(&token, spreadsheet_id, spreadsheet)

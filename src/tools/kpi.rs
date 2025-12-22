@@ -642,6 +642,7 @@ pub mod output {
         kpi_data: &KpiData,
         spreadsheet_id: Option<&str>,
         additional_sheets: Vec<(String, Vec<Vec<String>>)>,
+        oauth_cache_file: &Path,
     ) -> anyhow::Result<String> {
         fn mk_row(cells: impl IntoIterator<Item = ExtendedValue>) -> RowData {
             RowData {
@@ -838,7 +839,7 @@ pub mod output {
             ..Default::default()
         };
 
-        google_sheets::write_spreadsheet(spreadsheet_id, spreadsheet)
+        google_sheets::write_spreadsheet(spreadsheet_id, spreadsheet, oauth_cache_file)
     }
 
     pub fn into_days(time: TimeDelta) -> f64 {

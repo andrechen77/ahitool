@@ -1,4 +1,9 @@
-use std::{collections::BTreeSet, sync::Arc, thread};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread,
+};
 
 use ahitool::{
     date_range::DateRange,
@@ -9,7 +14,7 @@ use ahitool::{
     utils::FileBacked,
 };
 use egui::PopupCloseBehavior;
-use tracing::{info, trace, warn};
+use tracing::{info, warn};
 
 use crate::{
     data_loader::DataLoader,
@@ -53,7 +58,12 @@ impl KpiPage {
         }
     }
 
-    pub fn render(&mut self, ui: &mut egui::Ui, jn_client: &mut JobNimbusClient) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        jn_client: &mut JobNimbusClient,
+        oauth_cache_file: &Path,
+    ) {
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| jn_client.render(ui));
         egui::Frame::group(&egui::Style::default()).show(ui, |ui| {
             ui.heading("Calculate Key Performance Indicators");
@@ -215,7 +225,11 @@ impl KpiPage {
                         // stop borrowing self before we borrow it again to
                         // generate the google sheets
                         drop(kpi_data);
-                        self.start_generate_google_sheets(data, spreadsheet_id);
+                        self.start_generate_google_sheets(
+                            data,
+                            spreadsheet_id,
+                            oauth_cache_file.to_path_buf(),
+                        );
                     }
                 }
             });
@@ -293,6 +307,7 @@ impl KpiPage {
         &mut self,
         kpi_data: Arc<KpiData>,
         spreadsheet_id: Option<String>,
+        oauth_cache_file: PathBuf,
     ) {
         let export_complete_tx = self.export_data.start_fetch();
         info!("Generating Google Sheets");
@@ -326,6 +341,7 @@ impl KpiPage {
                 &kpi_data,
                 spreadsheet_id.as_deref(),
                 vec![("Settings".to_string(), settings)],
+                &oauth_cache_file,
             )
             .inspect_err(|err| {
                 warn!("Error exporting to Google Sheets: {}", err);
