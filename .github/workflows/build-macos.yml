@@ -23,8 +23,17 @@ jobs:
         with:
           command: build
           args: --release
-      - name: upload artifact
+      - name: bundle app and dmg
+        run: |
+          chmod +x ./scripts/build_macos_app.sh
+          ./scripts/build_macos_app.sh
+      - name: upload raw binary
         uses: actions/upload-artifact@v4
         with:
           name: ahitool-macos
           path: target/release/gui
+      - name: upload dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: ahitool-macos.dmg
+          path: ahitool-macos.dmg
