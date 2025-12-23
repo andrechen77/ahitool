@@ -16,6 +16,7 @@ VERSION="1.1"
 rm -rf "$APP_DIR"
 
 mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/Resources"
 
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
@@ -48,6 +49,8 @@ cat > "$APP_DIR/Contents/Info.plist" << EOF
 </dict>
 </plist>
 EOF
+
+./scripts/make_icns.sh ./assets/ahitool.png "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 echo "Built $APP_DIR"
 

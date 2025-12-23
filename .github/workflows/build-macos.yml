@@ -26,6 +26,7 @@ jobs:
       - name: bundle app and dmg
         run: |
           chmod +x ./scripts/build_macos_app.sh
+          chmod +x ./scripts/make_icns.sh
           ./scripts/build_macos_app.sh
       - name: upload raw binary
         uses: actions/upload-artifact@v4
