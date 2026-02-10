@@ -71,6 +71,7 @@ impl Display for Milestone {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MilestoneDates {
+    pub lead_acquired_date: Option<Timestamp>,
     pub appointment_date: Option<Timestamp>,
     pub contingency_date: Option<Timestamp>,
     pub contract_date: Option<Timestamp>,
@@ -81,10 +82,8 @@ impl Index<Milestone> for MilestoneDates {
     type Output = Option<Timestamp>;
 
     fn index(&self, stage: Milestone) -> &Self::Output {
-        static NONE: Option<Timestamp> = None;
-
         match stage {
-            Milestone::LeadAcquired => &NONE,
+            Milestone::LeadAcquired => &self.lead_acquired_date,
             Milestone::AppointmentMade => &self.appointment_date,
             Milestone::ContingencySigned => &self.contingency_date,
             Milestone::ContractSigned => &self.contract_date,
@@ -279,7 +278,7 @@ pub fn analyze_job(job: Arc<Job>) -> (AnalyzedJob, Vec<JobAnalysisError>) {
         let mut previous_date = None;
         let mut current_milestone = Milestone::LeadAcquired;
         let mut in_progress = true; // whether retracing of the job's history is still in progress
-        for milestone in Milestone::ordered_iter().skip(1) {
+        for milestone in Milestone::ordered_iter() {
             let date = job.milestone_dates[milestone];
 
             if in_progress {
@@ -461,6 +460,7 @@ impl TryFrom<serde_json::Value> for Job {
             job_name,
             lead_source,
             milestone_dates: MilestoneDates {
+                lead_acquired_date: Some(created_date), // assume the lead was acquired at the time it was created
                 appointment_date,
                 contingency_date,
                 contract_date,
@@ -506,6 +506,7 @@ mod test {
             job_name: None,
             lead_source: None,
             milestone_dates: MilestoneDates {
+                lead_acquired_date: Some(dt(0)),
                 appointment_date: date_1,
                 contingency_date: date_2,
                 contract_date: date_3,
@@ -738,6 +739,7 @@ mod test {
             job_name: None,
             lead_source: None,
             milestone_dates: MilestoneDates {
+                lead_acquired_date: Some(dt(0)),
                 appointment_date: Some(dt(1)),
                 contingency_date: None,
                 contract_date: Some(dt(3)),

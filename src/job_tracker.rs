@@ -82,7 +82,10 @@ impl<const M: usize, const N: usize, J: Clone + PartialEq + Debug> JobTracker<M,
             // only iterate over those timestamps that correspond to actual
             // milestones for this kind of job.
             let Some(bucket) = &mut self.buckets[kind][milestone] else {
-                assert!(timestamp.is_none(), "timestamp must be None for a milestone that does not apply to the specific job kind");
+                assert!(
+                    timestamp.is_none(),
+                    "timestamp must be None for a milestone that does not apply to the specific job kind"
+                );
                 continue;
             };
 

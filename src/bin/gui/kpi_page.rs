@@ -408,14 +408,28 @@ fn render_kpi_stats_table(ui: &mut egui::Ui, stats: &JobTrackerStats) {
             ui.label("Average Time (days)");
             ui.end_row();
 
+            let JobTrackerStats {
+                appt_count: _,
+                install_count: _,
+                loss_conv,
+                lead_appt_conv,
+                appt_continge_conv,
+                appt_contract_insure_conv,
+                continge_contract_conv,
+                appt_contract_retail_conv,
+                install_insure_conv,
+                install_retail_conv,
+            } = stats;
+
             for (name, conv_stats) in [
-                ("All Losses", &stats.loss_conv),
-                ("(I) Appt to Contingency", &stats.appt_continge_conv),
-                ("(I) Appt to Contract", &stats.appt_contract_insure_conv),
-                ("(I) Contingency to Contract", &stats.continge_contract_conv),
-                ("(R) Appt to Contract", &stats.appt_contract_retail_conv),
-                ("(I) Contract to Installation", &stats.install_insure_conv),
-                ("(R) Contract to Installation", &stats.install_retail_conv),
+                ("All Losses", loss_conv),
+                ("Lead to Appt", lead_appt_conv),
+                ("(I) Appt to Contingency", appt_continge_conv),
+                ("(I) Appt to Contract", appt_contract_insure_conv),
+                ("(I) Contingency to Contract", continge_contract_conv),
+                ("(R) Appt to Contract", appt_contract_retail_conv),
+                ("(I) Contract to Installation", install_insure_conv),
+                ("(R) Contract to Installation", install_retail_conv),
             ] {
                 use tools::kpi::output;
                 ui.label(name);

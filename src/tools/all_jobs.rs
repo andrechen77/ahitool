@@ -69,6 +69,7 @@ pub fn generate_all_jobs_google_sheets(
             amt_receivable,
         } = &*job;
         let MilestoneDates {
+            lead_acquired_date: _,
             appointment_date,
             contingency_date,
             contract_date,
